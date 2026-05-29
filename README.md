@@ -4,7 +4,9 @@
 but nearsighted — the goal is to review your merge request against the *whole*
 codebase, not just the diff in front of it.
 
-> ⚠️ **Alpha / building in public.** myopic is under active development. The
+> ⚠️ **Alpha / building in public.** myopic is under active development and
+> currently supports **GitLab merge requests only** — GitHub pull requests are
+> on the roadmap (the platform layer is already abstracted for them). The
 > roadmap below is public on purpose: follow along, open issues, and pitch in.
 > What's checked off works today; the rest is coming. Don't depend on it in a
 > critical workflow yet.
