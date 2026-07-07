@@ -13,6 +13,18 @@ from pathlib import Path
 from myopic.config import index_dir
 
 
+def _create_fts_index(table) -> None:
+    """Build (or replace) the full-text index on the 'text' column.
+
+    Uses the current LanceDB API — create_index with an FTS config; the old
+    create_fts_index was deprecated in 0.25. FTS is imported lazily so the base
+    install (which never imports lancedb) stays import-safe.
+    """
+    from lancedb.index import FTS
+
+    table.create_index("text", config=FTS(), replace=True)
+
+
 class CodeIndex:
     """A per-repo LanceDB table for hybrid code search."""
 
@@ -44,7 +56,9 @@ class CodeIndex:
 
     def has_table(self) -> bool:
         """Return True if this repo has already been indexed."""
-        return self._table_name in self._db.table_names()
+        # list_tables() returns a ListTablesResponse; .tables is the name list
+        # (no pagination when limit is unset — the default).
+        return self._table_name in self._db.list_tables().tables
 
     def row_count(self) -> int:
         """Number of chunks currently stored for this repo (0 if not indexed)."""
@@ -58,7 +72,7 @@ class CodeIndex:
         Returns the number of rows written.
         """
         table = self._db.create_table(self._table_name, data=rows, mode="overwrite")
-        table.create_fts_index("text", replace=True)
+        _create_fts_index(table)
         return len(rows)
 
     def apply_delta(self, changed_rows: list[dict], remove_paths: list[str]) -> int:
@@ -83,7 +97,7 @@ class CodeIndex:
             table.add(changed_rows)
 
         # FTS index must be rebuilt after mutating the table.
-        table.create_fts_index("text", replace=True)
+        _create_fts_index(table)
         return table.count_rows()
 
     # --- freshness metadata (JSON sidecar next to the LanceDB table) ---------
