@@ -68,12 +68,23 @@ jobs:
       #    https://pypi.org/manage/account/publishing/). No token.
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          # Idempotent: if a later step (e.g. registry) failed and the tag is
+          # re-run, don't choke on the already-uploaded version.
+          skip-existing: true
 
       # 3. GitHub Release with auto-generated notes from the commits.
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "${GITHUB_REF#refs/tags/}" --generate-notes --title "${GITHUB_REF#refs/tags/}"
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          # Idempotent: skip if the release already exists (safe tag re-run).
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists — skipping."
+          else
+            gh release create "$TAG" --generate-notes --title "$TAG"
+          fi
 
       # 4. Wait until the version is queryable on PyPI — the registry fetches the
       #    package's PyPI description to verify the mcp-name ownership marker.
