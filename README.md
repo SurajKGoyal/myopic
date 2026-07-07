@@ -118,7 +118,7 @@ pull-request read access) in your environment or a `[github]` section in
 **Claude Code** — one command, no config editing:
 
 ```
-/plugin marketplace add SurajKGoyal/myopic-marketplace
+/plugin marketplace add https://github.com/SurajKGoyal/myopic-marketplace
 /plugin install myopic@myopic
 ```
 
