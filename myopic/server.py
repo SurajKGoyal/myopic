@@ -36,7 +36,7 @@ can review it well:
 1. mr_review_status(url) — see where a review stands: metadata, every discussion
    thread, and what's resolved vs still open. Start here to orient.
 2. mr_changed_files(url) — a content-free manifest of the changed files (paths,
-   stats, noise flags). ALWAYS fits, no matter how large the MR. Call this before
+   stats, noise flags). Content-free, so it stays small even on a huge MR. Call before
    the diff on any big/unknown review, then fetch diffs a batch at a time.
 3. mr_diff_sections(url) — the diff grouped by enclosing function/class instead
    of raw hunks. Also token-budgeted (truncated/omitted_files/skipped_files).
@@ -124,8 +124,8 @@ GitHub needs GITHUB_TOKEN.
 def mr_changed_files(url: str) -> dict:
     """List the files changed in a merge request with stats — no diff content.
 
-    The cheap entry point for large reviews: the payload stays small no matter how
-    big the MR is, so it never overflows the context window. Each file reports
+    The cheap entry point for large reviews: the payload has no diff content, so it
+    stays small even on a very large MR. Each file reports
     additions/deletions, new/deleted/renamed flags, and a reviewability flag
     (lockfiles, generated code, binary assets, and enormous single-file changes
     are marked reviewable=false with a skip_reason). Files are ordered

@@ -16,7 +16,8 @@ diff.** Everything below ladders up to that.
 - **`mr_review_status(url)`** — one snapshot of where a review stands: metadata,
   every discussion thread, resolved vs open, general comments, file-change summary.
 - **`mr_changed_files(url)`** — a content-free manifest (paths, stats, noise flags)
-  that always fits, no matter how large the MR. The cheap entry point.
+  that stays small no matter how large the MR's diff — no content, just the map.
+  The cheap entry point.
 - **`mr_diff_sections(url)`** — the diff grouped by enclosing function/class
   (tree-sitter AST). Budget-bounded.
 - **`mr_diff_lines(url, files_filter?, lines_filter?)`** — the diff as line-numbered

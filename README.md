@@ -22,15 +22,16 @@ just the diff in front of it.
 
 ## Why
 
-Most AI code review looks at the diff in isolation. But the bugs that matter live
-in what the diff *doesn't* show: the caller three files away that now breaks, the
-convention every sibling file follows that this one quietly drops, the helper that
-already exists so this new one is a duplicate. A reviewer that only reads the
-patch is **myopic**.
+The bugs that matter rarely live in the diff. They live in what it *doesn't* show:
+the caller three files away that now breaks, the convention every sibling file
+follows that this one quietly drops, the helper that already exists so this new
+one is a duplicate. A reviewer that only reads the patch is **myopic**.
 
-myopic is an [MCP](https://modelcontextprotocol.io) server that feeds your AI
-client (Claude, Cursor, …) the structured context to review like someone who
-actually knows the codebase:
+myopic is an open-source [MCP](https://modelcontextprotocol.io) server that gives
+the AI client you already use (Claude, Cursor, …) the structured context to review
+like someone who knows the codebase. It runs on your machine — your code never
+leaves it, there's no per-PR bill, and the review happens in your own agent with
+your own standards:
 
 - **Read the change precisely** — the diff as line-numbered hunks or grouped by
   function/class, **token-safe on any MR size** (a 10,000-line diff never
@@ -53,7 +54,7 @@ Everything below **works today** unless marked planned.
 | Tool | What it does |
 |------|--------------|
 | `mr_review_status` | MR metadata + every discussion thread + resolved/unresolved, in one call |
-| `mr_changed_files` | a content-free manifest of changed files (paths, stats, noise flags) — always fits, any MR size |
+| `mr_changed_files` | a content-free manifest of changed files (paths, stats, noise flags) — no diff content, so it stays small even on a huge MR |
 | `mr_diff_sections` | the diff grouped by function/class (AST-aware), budget-bounded |
 | `mr_diff_lines` | the diff as line-numbered hunks — exact positions for inline comments — budget-bounded |
 
