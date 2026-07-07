@@ -74,11 +74,26 @@ and the semantic half of `mr_review_context`. See below.
 
 ## Install
 
+myopic is a server your AI client launches and keeps running, so install it once
+into a dedicated venv and point the client at a fixed path — nothing re-resolves
+on every launch:
+
 ```bash
-uvx myopic                       # run directly (recommended)
-# or
-pip install myopic
+python3 -m venv ~/.venvs/myopic
+~/.venvs/myopic/bin/pip install myopic          # add "[semantic]" for the optional layer
 ```
+
+The console script is now at `~/.venvs/myopic/bin/myopic`. That's the command
+your client runs (see [Add to your AI client](#add-to-your-ai-client)).
+
+<details>
+<summary>Prefer <code>uvx</code>?</summary>
+
+If your uv install is healthy you can skip the venv and run `uvx myopic`
+directly. It re-resolves the package on each launch and depends on uv's tool
+directory being writable — if you hit `failed to create directory .../uv/tools:
+Permission denied`, use the venv install above instead.
+</details>
 
 ## Setup
 
@@ -86,8 +101,8 @@ myopic needs a GitLab URL and a personal access token with `api` (or `read_api`)
 scope. The interactive wizard walks you through it:
 
 ```bash
-myopic init      # prompts for URL + token, verifies the connection, saves both
-myopic test      # ✓ Authenticated to https://gitlab.com as <you>
+~/.venvs/myopic/bin/myopic init   # prompts for URL + token, verifies, saves both
+~/.venvs/myopic/bin/myopic test   # ✓ Authenticated to https://gitlab.com as <you>
 ```
 
 The token is saved to `~/.config/myopic/.env` (chmod 600) and referenced from the
@@ -103,18 +118,21 @@ set `[github].url` to your instance host. Public github.com needs no URL.
 ## Add to your AI client
 
 **Claude Code** (`~/.claude/mcp.json` or project `.mcp.json`), Cursor, Claude
-Desktop, and other MCP clients all use the same command:
+Desktop, and other MCP clients all point at the installed binary — an absolute
+path, so the client never depends on your shell `PATH`:
 
 ```json
 {
   "mcpServers": {
     "myopic": {
-      "command": "uvx",
-      "args": ["myopic"]
+      "command": "/home/you/.venvs/myopic/bin/myopic"
     }
   }
 }
 ```
+
+Use your real home directory (`~` isn't expanded inside JSON). On a healthy
+`uvx` setup you can instead use `"command": "uvx", "args": ["myopic"]`.
 
 ## Use
 
@@ -137,7 +155,7 @@ drift, similar patterns — enable the semantic layer. It's **opt-in** so the ba
 install stays lean (no torch, no heavyweight vector DB):
 
 ```bash
-pip install "myopic[semantic]"   # adds lancedb + httpx only
+~/.venvs/myopic/bin/pip install "myopic[semantic]"   # adds lancedb + httpx only
 ollama pull unclemusclez/jina-embeddings-v2-base-code   # a small, code-specialized model
 ```
 
