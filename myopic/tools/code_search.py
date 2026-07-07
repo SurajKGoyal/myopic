@@ -52,6 +52,14 @@ def code_search(query: str, root: str, k: int = 8) -> dict:
     except RuntimeError as exc:
         return {"error": str(exc)}
 
+    # Best-effort freshness: results come from whatever commit was last indexed.
+    index_state = None
+    try:
+        from myopic.semantic.indexer import index_status as _index_status
+        index_state = _index_status(root)
+    except Exception:
+        index_state = None
+
     results = []
     for row in raw_results:
         entry: dict = {
@@ -67,4 +75,12 @@ def code_search(query: str, root: str, k: int = 8) -> dict:
             entry["score"] = row["_relevance_score"]
         results.append(entry)
 
-    return {"query": query, "root": root, "results": results}
+    out = {"query": query, "root": root, "results": results}
+    if index_state is not None:
+        out["index_status"] = index_state
+        if index_state.get("state") in ("stale", "model_mismatch"):
+            out["next"] = (
+                f"Index is {index_state['state']} — results may be out of date; "
+                f"run index_repo(root={root!r}) to refresh."
+            )
+    return out

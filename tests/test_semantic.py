@@ -137,6 +137,7 @@ class _FakeCodeIndex:
 
     def __init__(self):
         self.replaced_rows: list[dict] = []
+        self.written_meta: dict | None = None
 
     def has_table(self) -> bool:
         return False
@@ -144,6 +145,12 @@ class _FakeCodeIndex:
     def replace(self, rows: list[dict]) -> int:
         self.replaced_rows = list(rows)
         return len(rows)
+
+    def read_meta(self) -> dict | None:
+        return None
+
+    def write_meta(self, meta: dict) -> None:
+        self.written_meta = meta
 
 
 class TestIndexerChunkCollection:

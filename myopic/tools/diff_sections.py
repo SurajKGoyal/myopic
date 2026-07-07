@@ -195,6 +195,45 @@ def mr_diff_sections(
 
 
 # ---------------------------------------------------------------------------
+# Reusable changed-symbol extraction (shared with mr_review_context)
+# ---------------------------------------------------------------------------
+
+def changed_symbols(patch: str, language: str | None, is_new_file: bool) -> list[dict]:
+    """The real changed declaration symbols in one file's patch.
+
+    Reuses the exact section resolution mr_diff_sections uses (AST for new files,
+    hunk-header + declaration patterns for modified files), so what
+    mr_review_context analyzes matches what mr_diff_sections shows. Returns
+    [{symbol, symbol_type, changed_lines}] for sections that resolved to a named
+    symbol, ordered by changed_lines desc. Sections with no resolvable symbol are
+    skipped — they aren't actionable review targets, and skipping them is what
+    keeps stopwords/common tokens out of the changed-symbol list.
+    """
+    hunks = parse_hunks(patch)
+    if not hunks:
+        return []
+    sections = _build_sections(patch, hunks, language, is_new_file, include_context_lines=False)
+
+    # Sum changed lines per symbol (a symbol can span multiple sections).
+    weight: dict[str, int] = {}
+    kind: dict[str, str] = {}
+    for s in sections:
+        name = s.get("symbol")
+        if not name:
+            continue
+        changed = sum(1 for c in s["changes"] if c["type"] in ("add", "del"))
+        weight[name] = weight.get(name, 0) + changed
+        kind.setdefault(name, s.get("symbol_type", "unknown"))
+
+    out = [
+        {"symbol": name, "symbol_type": kind[name], "changed_lines": n}
+        for name, n in weight.items()
+    ]
+    out.sort(key=lambda d: d["changed_lines"], reverse=True)
+    return out
+
+
+# ---------------------------------------------------------------------------
 # Section building
 # ---------------------------------------------------------------------------
 

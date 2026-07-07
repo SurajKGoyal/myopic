@@ -6,10 +6,13 @@ Commands:
   myopic init --template    — write a blank config template for hand-editing
   myopic set-secret         — set or rotate the GitLab token (hidden input)
   myopic test               — verify the configured GitLab connection
+  myopic index [PATH]       — build/refresh the semantic index (cron-friendly)
   (no subcommand)           — start the MCP server when launched by a client
 """
 
 from __future__ import annotations
+
+from pathlib import Path
 
 import click
 from rich.console import Console
@@ -149,6 +152,32 @@ def test() -> None:
         msg = str(exc).splitlines()[0][:120]
         console.print(f"[red]✗[/red] Could not authenticate to {cfg.url}: [red]{msg}[/red]")
         raise SystemExit(1) from exc
+
+
+@cli.command()
+@click.argument("root", type=click.Path(exists=True, file_okay=False), default=".")
+@click.option("--force", is_flag=True, default=False,
+              help="Full rebuild instead of the default incremental refresh.")
+def index(root: str, force: bool) -> None:
+    """Build or refresh the semantic index for a repo (incremental by default).
+
+    myopic is a stdio server with no background process, so there is no built-in
+    scheduler. This command is the hook for one: point cron/launchd at
+    `myopic index /path/to/repo` to keep the index fresh out of band. Needs the
+    myopic[semantic] extra + a running Ollama.
+    """
+    from myopic.tools.index_repo import index_repo as _index_repo
+
+    resolved = str(Path(root).resolve())
+    result = _index_repo(resolved, force=force)
+    if "error" in result:
+        console.print(f"[red]✗[/red] {result['error']}")
+        raise SystemExit(1)
+    console.print(
+        f"[green]✓[/green] {result['mode']} index — {result['indexed_chunks']} chunks "
+        f"({result['changed_files']} changed, {result['deleted_files']} removed) "
+        f"@ {result.get('git_sha') or 'no-git'}"
+    )
 
 
 if __name__ == "__main__":

@@ -17,6 +17,7 @@ from myopic.tools.dependency_impact import dependency_impact as _dependency_impa
 from myopic.tools.diff_lines import mr_diff_lines as _mr_diff_lines
 from myopic.tools.diff_sections import mr_diff_sections as _mr_diff_sections
 from myopic.tools.index_repo import index_repo as _index_repo
+from myopic.tools.index_repo import index_status as _index_status
 from myopic.tools.post_comments import mr_post_comments as _mr_post_comments
 from myopic.tools.review_context import mr_review_context as _mr_review_context
 from myopic.tools.review_status import mr_review_status as _mr_review_status
@@ -58,24 +59,31 @@ Reviewing against the whole codebase (needs a LOCAL clone of the repo):
 
 Semantic search — optional, needs `pip install myopic[semantic]` + a local Ollama
 server (MYOPIC_OLLAMA_URL, default http://localhost:11434):
-7. index_repo(root) — build or refresh the semantic index for a repo. Run once
-   per clone; re-run after large changes. Returns {indexed_chunks, files, skipped}.
-8. code_search(query, root) — hybrid vector + full-text search over an indexed
+7. index_repo(root) — build or INCREMENTALLY refresh the semantic index. The
+   first run is a full build; after that only changed files are re-embedded, so
+   refreshing is cheap. force=True rebuilds everything. Returns {mode,
+   indexed_chunks, changed_files, ...}.
+8. index_status(root) — is the index fresh, stale, or absent? Freshness is keyed
+   to the git commit it was built from ("stale" reports commits_behind). Check
+   this before leaning on semantic results; if stale, ASK THE USER whether to
+   index_repo(root) first (it's incremental — usually seconds).
+9. code_search(query, root) — hybrid vector + full-text search over an indexed
    repo. Use to find patterns, conventions, or examples before reviewing a new
-   implementation.
-9. mr_review_context(url, root) — the graph-first fusion tool. Extracts the top
-   changed symbols from the MR diff, runs dependency_impact on each (always,
-   no extra needed), and — if myopic[semantic] is installed and the repo is
-   indexed — enriches each symbol with related_patterns from a semantic search.
-   A structure-only result (semantic_available: false) is a fully valid, complete
-   response; semantic context is purely additive.
+   implementation. Its result carries index_status so you can see staleness.
+10. mr_review_context(url, root) — the graph-first fusion tool. Extracts the real
+   changed DECLARATIONS from the diff (same AST resolution as mr_diff_sections,
+   not a token-frequency guess), runs dependency_impact on each (always, no extra
+   needed), and — if myopic[semantic] is installed and the repo is indexed —
+   enriches each with related_patterns from a semantic search. A structure-only
+   result (semantic_available: false) is fully valid; semantic context is
+   additive. It also surfaces index_status — if it reports stale, offer a refresh.
 
 Closing the loop — verify and (on explicit request) comment:
-10. mr_verify_review(url) — read-only. For each existing review thread, shows the
+11. mr_verify_review(url) — read-only. For each existing review thread, shows the
     diff changes near the commented line, so you can tell what was addressed vs
     still open without re-reading the whole diff. Use it to re-review after the
     author pushes follow-up commits.
-11. mr_post_comments(url, comments) — the ONLY mutating tool. Posts inline
+12. mr_post_comments(url, comments) — the ONLY mutating tool. Posts inline
     comments one at a time (queue + exponential backoff, no drafts/bulk-publish).
     Each comment needs file_path, body, and new_line or old_line — get exact line
     numbers from mr_diff_lines first. Only call this when the user explicitly asks
@@ -306,23 +314,47 @@ def trace_call_chain(
 
 
 @mcp.tool()
-def index_repo(root: str) -> dict:
-    """Build or refresh a semantic search index for a local repository.
+def index_repo(root: str, force: bool = False) -> dict:
+    """Build or incrementally refresh a semantic search index for a local repository.
 
     Walks the repo, chunks every supported-language file by AST boundaries,
     embeds the chunks via a local Ollama server, and stores them in a per-repo
-    LanceDB table. Run once per clone; re-run after substantial changes. Requires
-    the myopic[semantic] extra and Ollama running at MYOPIC_OLLAMA_URL (default
-    http://localhost:11434) with the embedding model pulled (MYOPIC_EMBED_MODEL).
+    LanceDB table. After the first build this is INCREMENTAL: only files whose
+    content changed since the last run are re-embedded, so refreshing is cheap —
+    run it freely (e.g. when index_status reports "stale"). A changed embedding
+    model or force=True does a full rebuild. Requires the myopic[semantic] extra
+    and Ollama at MYOPIC_OLLAMA_URL (default http://localhost:11434) with the
+    model pulled (MYOPIC_EMBED_MODEL).
 
     Args:
-        root: Absolute path to the repository to index.
+        root:  Absolute path to the repository to index.
+        force: Rebuild the whole index even if an up-to-date one exists.
 
     Returns:
-        {indexed_chunks, files, skipped} on success, or {"error": "..."} if the
-        semantic extra is not installed or Ollama is unreachable.
+        {mode, indexed_chunks, files, skipped, changed_files, deleted_files,
+         git_sha, model} on success, or {"error": "..."} on failure.
     """
-    return _index_repo(root=root)
+    return _index_repo(root=root, force=force)
+
+
+@mcp.tool()
+def index_status(root: str) -> dict:
+    """Report whether a repo's semantic index is fresh, stale, or absent.
+
+    Freshness is keyed to the git commit the index was built from — if HEAD has
+    moved on, the index is "stale" and reports how many commits behind. Check
+    this before leaning on semantic results (code_search / mr_review_context):
+    if state is "stale" or "model_mismatch", offer to index_repo(root) first.
+
+    Args:
+        root: Absolute path to the repository.
+
+    Returns:
+        {state: absent|fresh|stale|model_mismatch|unknown, root, chunks?,
+         indexed_at?, indexed_sha?, current_sha?, commits_behind?, reason?}
+        or {"error": "..."} if the semantic extra is not installed.
+    """
+    return _index_status(root=root)
 
 
 @mcp.tool()

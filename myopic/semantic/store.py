@@ -7,6 +7,7 @@ Lazily imports lancedb so the base myopic install never requires it.
 from __future__ import annotations
 
 import hashlib
+import json
 from pathlib import Path
 
 from myopic.config import index_dir
@@ -45,6 +46,12 @@ class CodeIndex:
         """Return True if this repo has already been indexed."""
         return self._table_name in self._db.table_names()
 
+    def row_count(self) -> int:
+        """Number of chunks currently stored for this repo (0 if not indexed)."""
+        if not self.has_table():
+            return 0
+        return self._db.open_table(self._table_name).count_rows()
+
     def replace(self, rows: list[dict]) -> int:
         """Overwrite the index with new rows. Each row needs 'vector', 'text', and metadata.
 
@@ -53,6 +60,54 @@ class CodeIndex:
         table = self._db.create_table(self._table_name, data=rows, mode="overwrite")
         table.create_fts_index("text", replace=True)
         return len(rows)
+
+    def apply_delta(self, changed_rows: list[dict], remove_paths: list[str]) -> int:
+        """Incrementally update the index: drop rows for the given file paths, then
+        add the new rows. Used for re-indexing only the files that changed.
+
+        `remove_paths` should include every file whose chunks must go — both
+        changed files (their old chunks) and deleted files. `changed_rows` are the
+        freshly-embedded chunks for the changed files. Returns the new total count.
+        """
+        table = self._db.open_table(self._table_name)
+
+        # Delete in bounded batches so a huge changeset can't build an
+        # unmanageable predicate string.
+        unique_paths = sorted(set(remove_paths))
+        for start in range(0, len(unique_paths), 400):
+            batch = unique_paths[start:start + 400]
+            quoted = ",".join("'" + p.replace("'", "''") + "'" for p in batch)
+            table.delete(f"file_path IN ({quoted})")
+
+        if changed_rows:
+            table.add(changed_rows)
+
+        # FTS index must be rebuilt after mutating the table.
+        table.create_fts_index("text", replace=True)
+        return table.count_rows()
+
+    # --- freshness metadata (JSON sidecar next to the LanceDB table) ---------
+
+    def _meta_path(self) -> Path:
+        return index_dir() / f"{self._table_name}.meta.json"
+
+    def read_meta(self) -> dict | None:
+        """Read the index freshness sidecar, or None if it doesn't exist / is unreadable."""
+        path = self._meta_path()
+        if not path.is_file():
+            return None
+        try:
+            return json.loads(path.read_text(encoding="utf-8"))
+        except (ValueError, OSError):
+            return None
+
+    def write_meta(self, meta: dict) -> None:
+        """Write the index freshness sidecar (git sha, model, file hashes, ...)."""
+        self._meta_path().write_text(json.dumps(meta), encoding="utf-8")
+
+    def delete_meta(self) -> None:
+        """Remove the freshness sidecar (used when clearing an index)."""
+        self._meta_path().unlink(missing_ok=True)
 
     def hybrid_search(
         self, query_text: str, query_vector: list[float], k: int = 8

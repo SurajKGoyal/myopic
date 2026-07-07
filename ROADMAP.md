@@ -39,6 +39,16 @@ failing. Noise (lockfiles, generated, binary) is listed but not expanded.
 **Optional semantic layer** (`myopic[semantic]` — lean: lancedb + httpx, no torch):
 `index_repo`, `code_search`, and the semantic half of `mr_review_context`. Local
 Ollama embeddings (code-specialized model) + embedded LanceDB hybrid search.
+Indexing is **incremental** — after the first build, only files whose content
+changed are re-embedded — and **freshness-aware**: `index_status(url)` reports
+whether the index is fresh, stale (with commits-behind), or built on a different
+model, keyed to the git commit it was indexed from. `myopic index <repo>` is a
+cron-friendly CLI hook (a stdio server has no place for a scheduler).
+
+**Changed-symbol selection is AST-based:** `mr_review_context` keys off the real
+changed *declarations* (the same resolution `mr_diff_sections` uses), not an
+identifier-frequency count — so `dependency_impact` runs on actual functions and
+classes, never stopwords like `the` / `number` / `styles`.
 
 **Both platforms:** GitLab merge requests **and GitHub pull requests** — pass
 either URL and the right backend is chosen automatically. This is what the
@@ -63,10 +73,11 @@ backend (`GitHubPlatform` + `GitHubReview`), not a rewrite of the tools.
 
 ## 🔜 Next
 
-### Sharper changed-symbol selection
-`mr_review_context` currently picks changed symbols by identifier frequency. Using
-the AST section symbols from `mr_diff_sections` would target the actual changed
-declarations more precisely. **Ideas welcome.**
+### Auto-refresh the index at review time
+`mr_review_context` / `code_search` already surface `index_status`, and the agent
+is told to offer a refresh when stale. A future option: an opt-in flag to
+transparently run the (incremental, cheap) re-index before answering, so a stale
+index never silently degrades a review. **Ideas welcome.**
 
 ---
 
@@ -79,7 +90,6 @@ GraphQL call would make it accurate.
 
 ### Other ideas on the table
 - CI/pipeline status + failed-job logs alongside the review.
-- Review-thread verification: did a later commit actually address each comment?
 - Configurable review "lenses" (security-only, performance-only, conventions-only).
 
 ---

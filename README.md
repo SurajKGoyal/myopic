@@ -172,6 +172,23 @@ search. Then the AI can `index_repo` a checked-out repo and `mr_review_context`
 will enrich each changed symbol with semantically similar code. Without the extra,
 `mr_review_context` still works — it just returns the structural (graph) signal.
 
+**Indexing is incremental and freshness-aware.** The first `index_repo` is a full
+build; after that only files whose content changed are re-embedded, so refreshing
+is cheap. `index_status(root)` reports whether the index is fresh, `stale` (with
+how many commits behind HEAD), or built on a different model — freshness is keyed
+to the git commit it was indexed from, not wall-clock time. `code_search` and
+`mr_review_context` carry that status so a stale index never silently degrades a
+review; the AI is told to offer a refresh when it's stale.
+
+myopic is a stdio server (no background process), so there's no built-in
+scheduler — but `myopic index /path/to/repo` is the hook for one. Point cron or
+launchd at it to keep an index fresh out of band:
+
+```bash
+# refresh hourly (incremental — usually seconds)
+0 * * * * ~/.venvs/myopic/bin/myopic index /path/to/repo
+```
+
 Override the model/endpoint with `MYOPIC_EMBED_MODEL` / `MYOPIC_OLLAMA_URL`.
 
 ---
