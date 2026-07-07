@@ -185,48 +185,38 @@ def index(root: str, force: bool) -> None:
 # doctor — health-check the setup, including the external Ollama dependency
 # ---------------------------------------------------------------------------
 
+# These wrap myopic.ollama so the shared logic lives in one place; doctor and the
+# headless auto-pull path (embeddings) both use it. Kept as module-level names so
+# tests can monkeypatch them.
 def _ollama_models(url: str) -> list[str]:
-    """Names of models pulled on the Ollama server. Raises if unreachable."""
-    import httpx
-
-    resp = httpx.get(f"{url}/api/tags", timeout=5)
-    resp.raise_for_status()
-    return [m.get("name", "") for m in resp.json().get("models", [])]
+    from myopic.ollama import list_models
+    return list_models(url)
 
 
 def _model_present(models: list[str], model: str) -> bool:
-    """True if `model` is among the pulled models (tolerant of an implicit :latest tag)."""
-    base = model.split(":")[0]
-    return any(n == model or n.split(":")[0] == base for n in models)
+    from myopic.ollama import model_present
+    return model_present(models, model)
 
 
 def _pull_model(url: str, model: str) -> None:
     """Pull an embedding model via Ollama's HTTP API, with a progress bar."""
-    import json
-
-    import httpx
     from rich.progress import BarColumn, DownloadColumn, Progress, TextColumn
+
+    from myopic.ollama import pull_model
 
     with Progress(
         TextColumn("[cyan]{task.description}"), BarColumn(), DownloadColumn(),
         console=console,
     ) as prog:
         task = prog.add_task(f"pulling {model}", total=None)
-        with httpx.stream("POST", f"{url}/api/pull", json={"model": model}, timeout=None) as r:
-            r.raise_for_status()
-            last: dict = {}
-            for line in r.iter_lines():
-                if not line:
-                    continue
-                last = json.loads(line)
-                if last.get("error"):
-                    raise RuntimeError(last["error"])
-                total, completed = last.get("total"), last.get("completed")
-                if total:
-                    prog.update(task, total=total, completed=completed or 0,
-                                description=last.get("status", ""))
-                else:
-                    prog.update(task, description=last.get("status", ""))
+
+        def _cb(status: str, completed: int | None, total: int | None) -> None:
+            if total:
+                prog.update(task, total=total, completed=completed or 0, description=status)
+            else:
+                prog.update(task, description=status)
+
+        pull_model(url, model, on_progress=_cb)
 
 
 @cli.command()

@@ -82,25 +82,40 @@ See [ROADMAP.md](./ROADMAP.md) for what's next.
 ## Install
 
 myopic is a server your AI client launches and keeps running, so install it once
-into a dedicated venv and point the client at a fixed path — nothing re-resolves
-on every launch:
+to a fixed location and point the client at it. The one-command way is
+[**pipx**](https://pipx.pypa.io) — an isolated, on-PATH install:
+
+```bash
+pipx install "myopic[semantic]"     # drop [semantic] for the lean core-only install
+```
+
+The binary lands at `~/.local/bin/myopic` (run `pipx ensurepath` once if it's not
+on your PATH). That's the command your client runs — see
+[Add to your AI client](#add-to-your-ai-client).
+
+<details>
+<summary>Hit a <code>Permission denied</code> on <code>~/.local</code>, <code>uv/tools</code>, or <code>pipx</code>?</summary>
+
+Some machines have a **root-owned `~/.local`** (usually from a past
+`sudo pip install --user`), which breaks pipx *and* uvx. Fix ownership once:
+
+```bash
+sudo chown -R "$(whoami)" ~/.local     # then: pipx ensurepath
+```
+
+Or skip `~/.local` entirely with a **dedicated venv** — the most robust option,
+and what the rest of this README's examples use:
 
 ```bash
 python3 -m venv ~/.venvs/myopic
-~/.venvs/myopic/bin/pip install myopic          # add "[semantic]" for the optional layer
+~/.venvs/myopic/bin/pip install "myopic[semantic]"
 ```
 
-The console script is now at `~/.venvs/myopic/bin/myopic`. That's the command
-your client runs (see [Add to your AI client](#add-to-your-ai-client)).
-
-<details>
-<summary>Prefer <code>uvx</code>?</summary>
-
-If your uv install is healthy you can skip the venv and run `uvx myopic`
-directly. It re-resolves the package on each launch and depends on uv's tool
-directory being writable — if you hit `failed to create directory .../uv/tools:
-Permission denied`, use the venv install above instead.
+The binary is then `~/.venvs/myopic/bin/myopic`.
 </details>
+
+> The examples below use the `~/.venvs/myopic/bin/` prefix; if you installed with
+> pipx, just use `myopic` (it's on your PATH).
 
 ## Setup
 
@@ -139,8 +154,34 @@ path, so the client never depends on your shell `PATH`:
 }
 ```
 
-Use your real home directory (`~` isn't expanded inside JSON). On a healthy
-`uvx` setup you can instead use `"command": "uvx", "args": ["myopic"]`.
+Use your real home directory (`~` isn't expanded inside JSON). If you installed
+with pipx and it's on your PATH, `"command": "myopic"` is enough; on a healthy
+`uvx` setup, `"command": "uvx", "args": ["myopic"]`.
+
+### Skip the wizard — configure inline (near plug-and-play)
+
+Don't want to run `myopic init` at all? Put the token straight in the client
+config's `env` block — myopic reads `GITLAB_TOKEN` / `GITHUB_TOKEN` from the
+environment, so no config file is needed:
+
+```json
+{
+  "mcpServers": {
+    "myopic": {
+      "command": "myopic",
+      "env": {
+        "GITLAB_TOKEN": "glpat-…",
+        "MYOPIC_AUTO_PULL": "1"
+      }
+    }
+  }
+}
+```
+
+`MYOPIC_AUTO_PULL=1` (optional) lets the semantic layer pull a missing embedding
+model automatically on first use instead of erroring. Trade-off vs `myopic init`:
+the token lives in the client config here rather than a chmod-600 `.env` — more
+convenient, slightly less private. Pick whichever fits.
 
 ## Use
 
@@ -223,6 +264,7 @@ Override the model/endpoint with `MYOPIC_EMBED_MODEL` / `MYOPIC_OLLAMA_URL`.
 | env var | `MYOPIC_GITLAB_TOKEN` / `GITLAB_TOKEN` | fallback if no TOML |
 | env var | `MYOPIC_CONFIG` / `MYOPIC_HOME` | override the config file / directory |
 | env var | `MYOPIC_EMBED_MODEL` / `MYOPIC_OLLAMA_URL` | semantic layer model + endpoint |
+| env var | `MYOPIC_AUTO_PULL` | `1` to auto-pull a missing embedding model on first use (default off) |
 
 ## Security
 

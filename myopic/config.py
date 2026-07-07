@@ -99,6 +99,11 @@ def ollama_url() -> str:
     return os.environ.get("MYOPIC_OLLAMA_URL", "http://localhost:11434").rstrip("/")
 
 
+def auto_pull() -> bool:
+    """Whether to auto-pull a missing embedding model (opt-in via MYOPIC_AUTO_PULL)."""
+    return os.environ.get("MYOPIC_AUTO_PULL", "").strip().lower() in ("1", "true", "yes", "on")
+
+
 def index_dir() -> Path:
     """Directory where semantic-search LanceDB indexes are stored."""
     return config_dir() / "index"

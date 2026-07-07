@@ -67,9 +67,11 @@ backend (`GitHubPlatform` + `GitHubReview`), not a rewrite of the tools.
   backoff so partial progress survives and rate limits are respected. Writes are
   explicit and clearly separated from the read-only tools.
 
-**Also:** an interactive `myopic init` setup wizard, and `myopic doctor` — a
-health check for the platform config and the optional semantic layer (Ollama
-reachable? embedding model pulled?) that offers to pull the model for you.
+**Setup, as close to plug-and-play as a private-repo tool gets:** one-command
+`pipx install "myopic[semantic]"`; token via the wizard (`myopic init`) **or**
+inline in the client config's `env` block (no config file needed); `myopic doctor`
+health-checks the platform + semantic layer and offers to pull the model; and
+`MYOPIC_AUTO_PULL=1` fetches a missing embedding model automatically on first use.
 
 ---
 
