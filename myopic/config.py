@@ -89,6 +89,21 @@ class PlatformConfig:
     token: str
 
 
+def embed_model() -> str:
+    """Ollama embedding model name (override via MYOPIC_EMBED_MODEL)."""
+    return os.environ.get("MYOPIC_EMBED_MODEL", "unclemusclez/jina-embeddings-v2-base-code")
+
+
+def ollama_url() -> str:
+    """Ollama base URL (override via MYOPIC_OLLAMA_URL)."""
+    return os.environ.get("MYOPIC_OLLAMA_URL", "http://localhost:11434").rstrip("/")
+
+
+def index_dir() -> Path:
+    """Directory where semantic-search LanceDB indexes are stored."""
+    return config_dir() / "index"
+
+
 def invalidate_config_cache() -> None:
     """Clear the cached config (used by tests and the CLI after edits)."""
     load_config.cache_clear()

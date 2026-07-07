@@ -37,6 +37,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0"]
+semantic = ["lancedb>=0.15", "httpx>=0.27"]
 
 [project.scripts]
 myopic = "myopic.cli:cli"

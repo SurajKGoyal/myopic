@@ -12,9 +12,12 @@ Start with:
 from mcp.server.fastmcp import FastMCP
 
 from myopic.tools.changed_files import mr_changed_files as _mr_changed_files
+from myopic.tools.code_search import code_search as _code_search
 from myopic.tools.dependency_impact import dependency_impact as _dependency_impact
 from myopic.tools.diff_lines import mr_diff_lines as _mr_diff_lines
 from myopic.tools.diff_sections import mr_diff_sections as _mr_diff_sections
+from myopic.tools.index_repo import index_repo as _index_repo
+from myopic.tools.review_context import mr_review_context as _mr_review_context
 from myopic.tools.review_status import mr_review_status as _mr_review_status
 from myopic.tools.trace_call_chain import trace_call_chain as _trace_call_chain
 
@@ -51,15 +54,27 @@ Reviewing against the whole codebase (needs a LOCAL clone of the repo):
    about ripple effects. These are the highest-value review signal — a change is
    only as safe as what depends on it.
 
+Semantic search — optional, needs `pip install myopic[semantic]` + a local Ollama
+server (MYOPIC_OLLAMA_URL, default http://localhost:11434):
+7. index_repo(root) — build or refresh the semantic index for a repo. Run once
+   per clone; re-run after large changes. Returns {indexed_chunks, files, skipped}.
+8. code_search(query, root) — hybrid vector + full-text search over an indexed
+   repo. Use to find patterns, conventions, or examples before reviewing a new
+   implementation.
+9. mr_review_context(url, root) — the graph-first fusion tool. Extracts the top
+   changed symbols from the MR diff, runs dependency_impact on each (always,
+   no extra needed), and — if myopic[semantic] is installed and the repo is
+   indexed — enriches each symbol with related_patterns from a semantic search.
+   A structure-only result (semantic_available: false) is a fully valid, complete
+   response; semantic context is purely additive.
+
 Recommended flow for any non-trivial MR:
   1. mr_changed_files(url) — see the shape.
   2. mr_diff_sections(url) (large MRs) or mr_diff_lines(url, files_filter=[...batch]) — read the change, token-safe.
   3. For each risky changed symbol: dependency_impact / trace_call_chain against a
      local clone — review the change against everything that depends on it.
-
-Roadmap (not yet available): optional semantic search over the codebase
-(myopic[semantic]) for pattern/convention consistency, and bulk inline-comment
-posting. See the project README/ROADMAP.
+  4. (Optional, with myopic[semantic]) mr_review_context(url, root) for a combined
+     graph + semantic context snapshot in one call.
 
 If a tool returns an "error" about configuration, the user has not set up a
 GitLab URL + token yet. Tell them to run `myopic init` in their terminal — do
@@ -271,6 +286,75 @@ def trace_call_chain(
     return _trace_call_chain(
         symbol=symbol, root=root, language=language, max_depth=max_depth,
     )
+
+
+@mcp.tool()
+def index_repo(root: str) -> dict:
+    """Build or refresh a semantic search index for a local repository.
+
+    Walks the repo, chunks every supported-language file by AST boundaries,
+    embeds the chunks via a local Ollama server, and stores them in a per-repo
+    LanceDB table. Run once per clone; re-run after substantial changes. Requires
+    the myopic[semantic] extra and Ollama running at MYOPIC_OLLAMA_URL (default
+    http://localhost:11434) with the embedding model pulled (MYOPIC_EMBED_MODEL).
+
+    Args:
+        root: Absolute path to the repository to index.
+
+    Returns:
+        {indexed_chunks, files, skipped} on success, or {"error": "..."} if the
+        semantic extra is not installed or Ollama is unreachable.
+    """
+    return _index_repo(root=root)
+
+
+@mcp.tool()
+def code_search(query: str, root: str, k: int = 8) -> dict:
+    """Hybrid semantic + full-text search over an indexed local repository.
+
+    Embeds the query via Ollama, then runs a combined vector + FTS search with
+    RRF reranking against the LanceDB index built by index_repo. Use this to
+    find existing patterns, conventions, or examples in the codebase before
+    reviewing a new implementation. Requires myopic[semantic] and index_repo to
+    have been run first.
+
+    Args:
+        query: Natural language or code snippet describing what to find.
+        root:  Absolute path to the repository (must have been indexed first).
+        k:     Maximum number of results to return (default 8).
+
+    Returns:
+        {query, root, results[{file_path, symbol, symbol_type, start_line,
+         end_line, text, score?}]} or {"error": "..."} on failure.
+    """
+    return _code_search(query=query, root=root, k=k)
+
+
+@mcp.tool()
+def mr_review_context(url: str, root: str, max_symbols: int = 8) -> dict:
+    """Graph-first review context: dependency impact per changed symbol, plus optional semantic enrichment.
+
+    Extracts the top-N most-frequent identifiers from the MR diff, then for each:
+    1. Runs dependency_impact(symbol, root) — always, no optional extras needed.
+    2. If myopic[semantic] is installed AND the repo has been indexed via
+       index_repo(root), enriches each symbol with related_patterns from a hybrid
+       semantic search against the codebase.
+
+    The semantic layer is purely additive: a result with semantic_available=false
+    is complete and actionable — dependency impact already covers the blast radius.
+    Use this as a single-call alternative to running dependency_impact separately
+    for each changed symbol.
+
+    Args:
+        url:         Full GitLab merge request URL.
+        root:        Absolute path to the local repository clone.
+        max_symbols: Maximum changed symbols to analyze (default 8).
+
+    Returns:
+        {mr_number, symbols[{symbol, impact, related_patterns?}],
+         semantic_available} or {"error": "..."} on review-open failure.
+    """
+    return _mr_review_context(url=url, root=root, max_symbols=max_symbols)
 
 
 def main() -> None:
