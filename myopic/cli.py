@@ -185,9 +185,6 @@ def index(root: str, force: bool) -> None:
 # doctor — health-check the setup, including the external Ollama dependency
 # ---------------------------------------------------------------------------
 
-# These wrap myopic.ollama so the shared logic lives in one place; doctor and the
-# headless auto-pull path (embeddings) both use it. Kept as module-level names so
-# tests can monkeypatch them.
 def _ollama_models(url: str) -> list[str]:
     from myopic.ollama import list_models
     return list_models(url)

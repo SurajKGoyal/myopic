@@ -81,107 +81,70 @@ See [ROADMAP.md](./ROADMAP.md) for what's next.
 
 ## Install
 
-myopic is a server your AI client launches and keeps running, so install it once
-to a fixed location and point the client at it. The one-command way is
-[**pipx**](https://pipx.pypa.io) — an isolated, on-PATH install:
+[pipx](https://pipx.pypa.io) installs myopic isolated and on your PATH:
 
 ```bash
-pipx install "myopic[semantic]"     # drop [semantic] for the lean core-only install
+pipx install "myopic[semantic]"     # omit [semantic] for the core-only install
 ```
 
-The binary lands at `~/.local/bin/myopic` (run `pipx ensurepath` once if it's not
-on your PATH). That's the command your client runs — see
-[Add to your AI client](#add-to-your-ai-client).
-
-<details>
-<summary>Hit a <code>Permission denied</code> on <code>~/.local</code>, <code>uv/tools</code>, or <code>pipx</code>?</summary>
-
-Some machines have a **root-owned `~/.local`** (usually from a past
-`sudo pip install --user`), which breaks pipx *and* uvx. Fix ownership once:
-
-```bash
-sudo chown -R "$(whoami)" ~/.local     # then: pipx ensurepath
-```
-
-Or skip `~/.local` entirely with a **dedicated venv** — the most robust option,
-and what the rest of this README's examples use:
-
-```bash
-python3 -m venv ~/.venvs/myopic
-~/.venvs/myopic/bin/pip install "myopic[semantic]"
-```
-
-The binary is then `~/.venvs/myopic/bin/myopic`.
-</details>
-
-> The examples below use the `~/.venvs/myopic/bin/` prefix; if you installed with
-> pipx, just use `myopic` (it's on your PATH).
+Prefer a plain venv? `python3 -m venv ~/.venvs/myopic && ~/.venvs/myopic/bin/pip
+install "myopic[semantic]"`, then use that binary where the examples say `myopic`.
 
 ## Setup
 
-myopic needs a GitLab URL and a personal access token with `api` (or `read_api`)
-scope. The interactive wizard walks you through it:
+myopic needs a personal access token with `api` (or `read_api`) scope. The wizard
+walks you through it:
 
 ```bash
-~/.venvs/myopic/bin/myopic init     # prompts for URL + token, verifies, saves both
-~/.venvs/myopic/bin/myopic test     # ✓ Authenticated to https://gitlab.com as <you>
-~/.venvs/myopic/bin/myopic doctor   # health-check config + (if enabled) the semantic layer
+myopic init     # prompts for URL + token, verifies, saves both
+myopic test     # ✓ Authenticated to https://gitlab.com as <you>
+myopic doctor   # health-check config + (if enabled) the semantic layer
 ```
 
 The token is saved to `~/.config/myopic/.env` (chmod 600) and referenced from the
-TOML as `${GITLAB_TOKEN}` — it never lives in the config file. Rotate it any time
-with `myopic set-secret`. Prefer to hand-edit? `myopic init --template`.
+TOML as `${GITLAB_TOKEN}` — never in the config file itself. Rotate it with
+`myopic set-secret`, or hand-edit via `myopic init --template`.
 
-**Reviewing GitHub PRs?** myopic reviews GitHub pull requests too — just give it
-a PR URL. It needs a **GitHub token** (a PAT with pull-request read access). Set
-it via `GITHUB_TOKEN` in your environment / the `.env`, or add a `[github]`
-section to `config.toml` (see `myopic init --template`). For GitHub Enterprise,
-set `[github].url` to your instance host. Public github.com needs no URL.
+**GitHub PRs:** just pass a PR URL. Set a `GITHUB_TOKEN` (a PAT with
+pull-request read access) in your environment or a `[github]` section in
+`config.toml`. For GitHub Enterprise, set `[github].url` to your host.
 
 ## Add to your AI client
 
-**Claude Code** (`~/.claude/mcp.json` or project `.mcp.json`), Cursor, Claude
-Desktop, and other MCP clients all point at the installed binary — an absolute
-path, so the client never depends on your shell `PATH`:
+Point any MCP client — Claude Code, Cursor, Claude Desktop — at the `myopic`
+command:
 
 ```json
 {
   "mcpServers": {
     "myopic": {
-      "command": "/home/you/.venvs/myopic/bin/myopic"
+      "command": "myopic"
     }
   }
 }
 ```
 
-Use your real home directory (`~` isn't expanded inside JSON). If you installed
-with pipx and it's on your PATH, `"command": "myopic"` is enough; on a healthy
-`uvx` setup, `"command": "uvx", "args": ["myopic"]`.
+If your client can't find it on PATH, use the absolute path (pipx installs to
+`~/.local/bin/myopic`).
 
-### Skip the wizard — configure inline (near plug-and-play)
+### Configure inline instead of `myopic init`
 
-Don't want to run `myopic init` at all? Put the token straight in the client
-config's `env` block — myopic reads `GITLAB_TOKEN` / `GITHUB_TOKEN` from the
-environment, so no config file is needed:
+Put the token in the `env` block and skip the config file — myopic reads
+`GITLAB_TOKEN` / `GITHUB_TOKEN` from the environment:
 
 ```json
 {
   "mcpServers": {
     "myopic": {
       "command": "myopic",
-      "env": {
-        "GITLAB_TOKEN": "glpat-…",
-        "MYOPIC_AUTO_PULL": "1"
-      }
+      "env": { "GITLAB_TOKEN": "glpat-…", "MYOPIC_AUTO_PULL": "1" }
     }
   }
 }
 ```
 
-`MYOPIC_AUTO_PULL=1` (optional) lets the semantic layer pull a missing embedding
-model automatically on first use instead of erroring. Trade-off vs `myopic init`:
-the token lives in the client config here rather than a chmod-600 `.env` — more
-convenient, slightly less private. Pick whichever fits.
+`MYOPIC_AUTO_PULL=1` (optional) pulls a missing embedding model on first use
+instead of erroring.
 
 ## Use
 
@@ -203,34 +166,20 @@ For "is this consistent with the rest of the codebase?" — duplication, convent
 drift, similar patterns — enable the semantic layer. It's **opt-in** so the base
 install stays lean (no torch, no heavyweight vector DB).
 
-### How it works (and what you provide)
+Embeddings come from a [local Ollama](https://ollama.com) server **you** run —
+your code never leaves your machine. myopic talks to Ollama over HTTP; it does
+not bundle or launch it. The one-time prerequisites:
 
-myopic embeds your code **locally** and never sends it to a third party. The
-embeddings come from a [**local Ollama**](https://ollama.com) server that **you**
-run — myopic talks to it over HTTP (`POST /api/embed`); it does **not** bundle,
-launch, or silently download anything. So the semantic layer has three
-prerequisites, and they're a one-time setup:
+1. `pip install "myopic[semantic]"` — adds `lancedb` + `httpx`.
+2. Ollama running (default `localhost:11434`, or set `MYOPIC_OLLAMA_URL`).
+3. The embedding model pulled: `ollama pull unclemusclez/jina-embeddings-v2-base-code`.
 
-1. **The extra:** `pip install "myopic[semantic]"` — adds `lancedb` + `httpx` only.
-2. **Ollama running** — install it and make sure it serves on `localhost:11434`
-   (or set `MYOPIC_OLLAMA_URL`).
-3. **The model pulled** — Ollama's HTTP API does *not* auto-pull, so the model
-   must already be present, or every embed call returns a 404.
+`myopic doctor` checks all three and offers to pull the model for you.
 
-`myopic doctor` checks all three and **offers to pull the model for you**:
-
-```bash
-~/.venvs/myopic/bin/pip install "myopic[semantic]"
-~/.venvs/myopic/bin/myopic doctor        # ✓ extra ✓ Ollama ○ model → "Pull it now? (~150 MB)"
-```
-
-Prefer to do it by hand? `ollama pull unclemusclez/jina-embeddings-v2-base-code`.
-
-Under the hood it stores the embeddings in an embedded
-[LanceDB](https://lancedb.com) index with native hybrid (vector + full-text)
-search. The AI then `index_repo`s a checked-out repo and `mr_review_context`
-enriches each changed symbol with semantically similar code. Without the extra,
-`mr_review_context` still works — it just returns the structural (graph) signal.
+Embeddings are stored in an embedded [LanceDB](https://lancedb.com) index with
+hybrid (vector + full-text) search. `index_repo` indexes a checked-out repo and
+`mr_review_context` enriches each changed symbol with semantically similar code.
+Without the extra, `mr_review_context` still returns the structural (graph) signal.
 
 **Indexing is incremental and freshness-aware.** The first `index_repo` is a full
 build; after that only files whose content changed are re-embedded, so refreshing
@@ -246,7 +195,7 @@ launchd at it to keep an index fresh out of band:
 
 ```bash
 # refresh hourly (incremental — usually seconds)
-0 * * * * ~/.venvs/myopic/bin/myopic index /path/to/repo
+0 * * * * myopic index /path/to/repo
 ```
 
 Override the model/endpoint with `MYOPIC_EMBED_MODEL` / `MYOPIC_OLLAMA_URL`.
