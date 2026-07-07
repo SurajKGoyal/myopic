@@ -6,12 +6,12 @@
     "url": "https://github.com/SurajKGoyal/myopic",
     "source": "github"
   },
-  "version": "0.0.8",
+  "version": "0.0.9",
   "packages": [
     {
       "registryType": "pypi",
       "identifier": "myopic",
-      "version": "0.0.8",
+      "version": "0.0.9",
       "transport": {
         "type": "stdio"
       },

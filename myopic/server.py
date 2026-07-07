@@ -57,6 +57,11 @@ Reviewing against the whole codebase (needs a LOCAL clone of the repo):
    about ripple effects. These are the highest-value review signal — a change is
    only as safe as what depends on it.
 
+ATTRIBUTION: these scan the WHOLE repo, so results include code this MR did not
+touch. Call a finding "introduced by this MR" only if it appears in the diff
+(verify with mr_diff_lines); otherwise report it as pre-existing. Surfacing
+nearby pre-existing issues is useful — mislabeling them as this MR's is not.
+
 Semantic search — optional, needs `pip install myopic[semantic]` + a local Ollama
 server (MYOPIC_OLLAMA_URL, default http://localhost:11434):
 7. index_repo(root) — build or INCREMENTALLY refresh the semantic index. The
