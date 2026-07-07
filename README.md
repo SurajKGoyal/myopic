@@ -1,57 +1,82 @@
 # myopic
 
-**The code-review MCP with the most ironic name in the registry.** It's anything
-but nearsighted — the goal is to review your merge request against the *whole*
-codebase, not just the diff in front of it.
+[![PyPI version](https://img.shields.io/pypi/v/myopic.svg)](https://pypi.org/project/myopic/)
+[![Python](https://img.shields.io/pypi/pyversions/myopic.svg)](https://pypi.org/project/myopic/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![MCP Registry](https://img.shields.io/badge/MCP-Registry-7d6ad9.svg)](https://registry.modelcontextprotocol.io)
 
-> ⚠️ **Alpha / building in public.** myopic is under active development and
-> currently supports **GitLab merge requests only** — GitHub pull requests are
-> on the roadmap (the platform layer is already abstracted for them). The
-> roadmap below is public on purpose: follow along, open issues, and pitch in.
-> What's checked off works today; the rest is coming. Don't depend on it in a
-> critical workflow yet.
+**The code-review MCP with the most ironic name in the registry.** It's anything
+but nearsighted — it reviews your merge request against the *whole* codebase, not
+just the diff in front of it.
+
+> ⚠️ **Alpha / building in public.** Supports **GitLab merge requests** today
+> (GitHub PRs are next — the platform layer is already abstracted for them). The
+> review tools work now; comment-posting is on the roadmap. Follow along, open
+> issues, pitch in. Don't wire it into a critical workflow just yet.
 
 ---
 
 ## Why
 
-Most AI code review looks at the diff in isolation. But the bugs that matter
-live in what the diff *doesn't* show: the caller three files away that now
-breaks, the convention every sibling file follows that this one quietly drops,
-the helper that already exists so this new one is a duplicate, the file nobody
-imports. A reviewer that only reads the patch is **myopic**.
+Most AI code review looks at the diff in isolation. But the bugs that matter live
+in what the diff *doesn't* show: the caller three files away that now breaks, the
+convention every sibling file follows that this one quietly drops, the helper that
+already exists so this new one is a duplicate. A reviewer that only reads the
+patch is **myopic**.
 
 myopic is an [MCP](https://modelcontextprotocol.io) server that feeds your AI
-client (Claude, Cursor, etc.) the structured context to review like someone who
-actually knows the codebase — starting with precise, line-numbered access to the
-merge request itself, and growing toward full codebase-aware review (see the
-roadmap).
+client (Claude, Cursor, …) the structured context to review like someone who
+actually knows the codebase:
+
+- **Read the change precisely** — the diff as line-numbered hunks or grouped by
+  function/class, **token-safe on any MR size** (a 10,000-line diff never
+  overflows the context window).
+- **Review it against the whole codebase** — who calls the changed code (blast
+  radius), the caller/callee graph, and — optionally — semantically similar code
+  so you catch broken conventions and duplication.
 
 It pairs with [amnesic](https://github.com/SurajKGoyal/amnesic), my MCP server
 that gives AI persistent memory of SQL databases.
 
 ---
 
-## Status & roadmap
+## Tools
 
-| Tool | What it does | Status |
-|------|--------------|--------|
-| `mr_review_status` | MR metadata + every discussion thread + resolved/unresolved state, in one call | ✅ alpha |
-| `mr_diff_lines` | MR diff as structured, line-numbered hunks — exact positions for inline comments | ✅ alpha |
-| `mr_diff_sections` | AST-grouped diff (by function/class) so large MRs don't blow the token budget | 🔜 planned |
-| `review_with_context` | RAG-augmented review: callers of changed symbols + conventions sibling files follow + duplication + unwired-file detection | 🔜 planned |
-| `mr_post_comments` | bulk-post inline review comments at exact diff positions | 🔜 planned |
-| GitHub pull requests | same tools, GitHub PRs (the platform layer is already abstracted for this) | 🔜 planned |
+Everything below **works today** unless marked planned.
 
-Full details and design notes: [ROADMAP.md](./ROADMAP.md). Ideas and issues
-welcome — that's the point of building this in the open.
+**Read the merge request (token-safe by construction):**
+
+| Tool | What it does |
+|------|--------------|
+| `mr_review_status` | MR metadata + every discussion thread + resolved/unresolved, in one call |
+| `mr_changed_files` | a content-free manifest of changed files (paths, stats, noise flags) — always fits, any MR size |
+| `mr_diff_sections` | the diff grouped by function/class (AST-aware), budget-bounded |
+| `mr_diff_lines` | the diff as line-numbered hunks — exact positions for inline comments — budget-bounded |
+
+On a large MR, the diff tools return a bounded page and list the rest under
+`omitted_files` / `truncated` instead of failing; lockfiles, generated code, and
+binaries are listed but not expanded. Fetch the rest with `files_filter`.
+
+**Review against the whole codebase (point at a local clone):**
+
+| Tool | What it does |
+|------|--------------|
+| `dependency_impact` | everywhere a changed symbol is used — the blast radius (ripgrep + tree-sitter) |
+| `trace_call_chain` | the caller/callee graph of a symbol |
+| `mr_review_context` | **the headline** — for each changed symbol: its impact (always), plus semantically similar code when the optional layer is enabled |
+
+**Optional semantic layer** (`myopic[semantic]`) — `index_repo`, `code_search`,
+and the semantic half of `mr_review_context`. See below.
+
+**Planned:** bulk inline-comment posting; GitHub pull requests. See
+[ROADMAP.md](./ROADMAP.md).
 
 ---
 
 ## Install
 
 ```bash
-uvx myopic            # run directly (recommended)
+uvx myopic                       # run directly (recommended)
 # or
 pip install myopic
 ```
@@ -59,31 +84,21 @@ pip install myopic
 ## Setup
 
 myopic needs a GitLab URL and a personal access token with `api` (or `read_api`)
-scope.
+scope. The interactive wizard walks you through it:
 
 ```bash
-myopic init           # writes a config template + prints next steps
+myopic init      # prompts for URL + token, verifies the connection, saves both
+myopic test      # ✓ Authenticated to https://gitlab.com as <you>
 ```
 
-Then put your token in `~/.config/myopic/.env`:
-
-```
-GITLAB_TOKEN=glpat-xxxxxxxxxxxxxxxxxxxx
-```
-
-Edit `~/.config/myopic/config.toml` if your GitLab is self-hosted (defaults to
-`https://gitlab.com`). Verify it:
-
-```bash
-myopic test           # ✓ Authenticated to https://gitlab.com as <you>
-```
-
-The token never lives in the TOML — it's referenced as `${GITLAB_TOKEN}` and
-read from the `.env` file (or your environment).
+The token is saved to `~/.config/myopic/.env` (chmod 600) and referenced from the
+TOML as `${GITLAB_TOKEN}` — it never lives in the config file. Rotate it any time
+with `myopic set-secret`. Prefer to hand-edit? `myopic init --template`.
 
 ## Add to your AI client
 
-**Claude Code** (`~/.claude/mcp.json` or project `.mcp.json`):
+**Claude Code** (`~/.claude/mcp.json` or project `.mcp.json`), Cursor, Claude
+Desktop, and other MCP clients all use the same command:
 
 ```json
 {
@@ -96,18 +111,38 @@ read from the `.env` file (or your environment).
 }
 ```
 
-The same `command`/`args` work for Claude Desktop, Cursor, and other
-MCP-compatible clients — consult your client's MCP config docs for where the
-file lives.
-
 ## Use
 
 Point your AI at a merge request:
 
 > "Review this MR: https://gitlab.com/group/project/-/merge_requests/42"
 
-Your client will call `mr_review_status` to orient, then `mr_diff_lines` to read
-exactly what changed with precise line numbers — and review from there.
+A good flow the client can follow: `mr_changed_files` to see the shape →
+`mr_diff_sections` (large MRs) or `mr_diff_lines` to read the change → then, with
+a local clone checked out, `dependency_impact` / `trace_call_chain` (or
+`mr_review_context`) on the risky changed symbols to review against everything
+that depends on them.
+
+---
+
+## Optional: semantic search (`myopic[semantic]`)
+
+For "is this consistent with the rest of the codebase?" — duplication, convention
+drift, similar patterns — enable the semantic layer. It's **opt-in** so the base
+install stays lean (no torch, no heavyweight vector DB):
+
+```bash
+pip install "myopic[semantic]"   # adds lancedb + httpx only
+ollama pull unclemusclez/jina-embeddings-v2-base-code   # a small, code-specialized model
+```
+
+It embeds your code locally via [Ollama](https://ollama.com) and stores it in an
+embedded [LanceDB](https://lancedb.com) index with native hybrid (vector + full-text)
+search. Then the AI can `index_repo` a checked-out repo and `mr_review_context`
+will enrich each changed symbol with semantically similar code. Without the extra,
+`mr_review_context` still works — it just returns the structural (graph) signal.
+
+Override the model/endpoint with `MYOPIC_EMBED_MODEL` / `MYOPIC_OLLAMA_URL`.
 
 ---
 
@@ -117,25 +152,27 @@ exactly what changed with precise line numbers — and review from there.
 |--------|-----|-------|
 | `config.toml` | `[gitlab].url` | GitLab base URL (default `https://gitlab.com`) |
 | `config.toml` | `[gitlab].token` | use `${GITLAB_TOKEN}` — don't hardcode |
-| `.env` (next to config) | `GITLAB_TOKEN` | the actual token value |
+| `.env` (next to config) | `GITLAB_TOKEN` | the actual token value (chmod 600) |
 | env var | `MYOPIC_GITLAB_URL` / `GITLAB_URL` | fallback if no TOML |
 | env var | `MYOPIC_GITLAB_TOKEN` / `GITLAB_TOKEN` | fallback if no TOML |
-| env var | `MYOPIC_CONFIG` | override the config file path |
-| env var | `MYOPIC_HOME` | override the config directory |
+| env var | `MYOPIC_CONFIG` / `MYOPIC_HOME` | override the config file / directory |
+| env var | `MYOPIC_EMBED_MODEL` / `MYOPIC_OLLAMA_URL` | semantic layer model + endpoint |
 
 ## Security
 
-- **Read-oriented today.** The shipped tools only *read* MR data; nothing posts
-  or mutates. (Comment-posting on the roadmap will be explicit and opt-in.)
+- **Read-only today.** The shipped tools only *read* MR and repo data; nothing
+  posts or mutates. (Comment-posting on the roadmap will be explicit and opt-in.)
 - **Your token stays local.** It lives in your `.env` / environment and is sent
   only to your configured GitLab instance — never to any third party.
 - Auth errors are scrubbed so your token never leaks into error messages.
+- The optional semantic layer runs entirely locally (your Ollama, an on-disk
+  index) — your code is never sent to a third party.
 
 ## Development
 
 ```bash
-pip install -e ".[dev]"
-pytest                 # diff-parser unit tests, no network needed
+pip install -e ".[dev]"          # + ".[semantic]" to work on the semantic layer
+pytest                           # hermetic — no network, Ollama, or lancedb needed
 ```
 
 ## License

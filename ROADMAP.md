@@ -9,51 +9,53 @@ diff.** Everything below ladders up to that.
 
 ---
 
-## ✅ Shipped (alpha)
+## ✅ Shipped (alpha — v0.0.1)
 
-### `mr_review_status(url)`
-One snapshot of where a review stands: MR metadata, every discussion thread,
-which are resolved vs open, general comments, and a lightweight file-change
-summary. Replaces 5-6 separate GitLab API calls.
+**Read the merge request — token-safe on any MR size:**
 
-### `mr_diff_lines(url, files_filter?, lines_filter?)`
-The merge request diff as structured, line-numbered hunks — every line tagged
-add/del/context with exact old and new line numbers. This is the foundation for
-precise inline comments: `lines_filter` translates "comment on source line N"
-into the exact diff position the API needs. `files_filter` keeps large reviews
-under token limits.
+- **`mr_review_status(url)`** — one snapshot of where a review stands: metadata,
+  every discussion thread, resolved vs open, general comments, file-change summary.
+- **`mr_changed_files(url)`** — a content-free manifest (paths, stats, noise flags)
+  that always fits, no matter how large the MR. The cheap entry point.
+- **`mr_diff_sections(url)`** — the diff grouped by enclosing function/class
+  (tree-sitter AST). Budget-bounded.
+- **`mr_diff_lines(url, files_filter?, lines_filter?)`** — the diff as line-numbered
+  hunks (exact positions for inline comments). Budget-bounded; `lines_filter`
+  resolves "comment on source line N" to the diff position the API needs.
 
-### Platform-abstraction seam
-All tools talk to a normalized `Review` interface, never to a platform SDK
-directly. GitLab is the first implementation; GitHub is a new implementation,
-not a rewrite (see below).
+The diff tools are **token-safe by construction**: on a large MR they return a
+bounded page and list the rest under `omitted_files` / `truncated` instead of
+failing. Noise (lockfiles, generated, binary) is listed but not expanded.
+
+**Review against the whole codebase (local clone):**
+
+- **`dependency_impact(symbol, root)`** — everywhere a symbol is used (blast
+  radius), classified by usage type (ripgrep + tree-sitter AST).
+- **`trace_call_chain(symbol, root)`** — the caller/callee graph of a symbol.
+- **`mr_review_context(url, root)`** — the north star: per changed symbol, its
+  structural impact (always) plus semantically similar code (when the optional
+  layer is enabled). Graph-first — structure alone is a valid answer.
+
+**Optional semantic layer** (`myopic[semantic]` — lean: lancedb + httpx, no torch):
+`index_repo`, `code_search`, and the semantic half of `mr_review_context`. Local
+Ollama embeddings (code-specialized model) + embedded LanceDB hybrid search.
+
+**Also:** the platform-abstraction seam (`Review` interface — GitHub is a new
+backend, not a rewrite) and an interactive `myopic init` setup wizard.
 
 ---
 
 ## 🔜 Next
 
-### `mr_diff_sections(url)` — AST-grouped diffs
-Group changed lines by the function/class they belong to (via tree-sitter) so a
-1,000-line MR can be reviewed structurally instead of overflowing the context
-window. All changed lines preserved; context optional.
-
-### `review_with_context(url, repo_path)` — the actual point
-This is myopic's reason to exist. For each changed symbol, surface:
-- **Callers** of modified public symbols (what might break).
-- **Conventions** sibling/similar files follow that this change drops
-  (missing imports, hooks, error handling).
-- **Intra-MR duplication** — near-identical new files copy-pasted within the MR.
-- **Unwired files** — new files nothing imports or references (dead on arrival).
-
-Pure structured context, no LLM judgment — the calling agent reviews; myopic
-makes sure it isn't reviewing blind. This depends on a codebase index; the
-indexing approach (and how to keep setup friction near zero) is the main open
-design question. **Ideas welcome.**
-
 ### `mr_post_comments(url, comments[])` — explicit, opt-in writes
 Bulk-post inline review comments at exact diff positions (resolved via
 `mr_diff_lines`), rate-limited for self-hosted GitLab. Writes will always be
 explicit and clearly separated from the read-only tools.
+
+### Sharper changed-symbol selection
+`mr_review_context` currently picks changed symbols by identifier frequency. Using
+the AST section symbols from `mr_diff_sections` would target the actual changed
+declarations more precisely. **Ideas welcome.**
 
 ---
 
