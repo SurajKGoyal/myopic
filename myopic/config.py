@@ -109,14 +109,16 @@ def invalidate_config_cache() -> None:
     load_config.cache_clear()
 
 
-@lru_cache(maxsize=1)
-def load_config() -> PlatformConfig:
+@lru_cache(maxsize=None)
+def load_config(platform: str = "gitlab") -> PlatformConfig:
     """
-    Load and validate the platform configuration.
+    Load and validate the config for a review platform ("gitlab" or "github").
 
-    Precedence: TOML file values (with ${ENV} expansion) win; otherwise fall back
-    to environment variables. Raises ValueError with an actionable message if no
-    usable configuration is found.
+    The TOML section `[<platform>]` wins (with ${ENV} expansion); environment
+    variables are the fallback. GitLab needs a URL + token; GitHub needs only a
+    token (the URL is optional — it's just the GitHub Enterprise base host, and
+    public github.com is the default). Raises ValueError with an actionable
+    message when the required values are missing.
     """
     # Auto-load the .env sitting next to the config so ${VAR} works out of the box.
     _load_env_file(config_dir() / ".env")
@@ -125,21 +127,35 @@ def load_config() -> PlatformConfig:
     path = config_path()
     if path.is_file():
         data = tomllib.loads(path.read_text(encoding="utf-8"))
+    section = data.get(platform, {}) if isinstance(data, dict) else {}
 
-    gitlab = data.get("gitlab", {}) if isinstance(data, dict) else {}
+    if platform == "gitlab":
+        url = section.get("url") or os.environ.get("MYOPIC_GITLAB_URL") or os.environ.get("GITLAB_URL")
+        token = section.get("token") or os.environ.get("MYOPIC_GITLAB_TOKEN") or os.environ.get("GITLAB_TOKEN")
+        if not url or not token:
+            raise ValueError(
+                "myopic is not configured for GitLab. Set a URL and token via "
+                f"{config_path()} [gitlab] or the GITLAB_URL / GITLAB_TOKEN "
+                "environment variables. Run `myopic init`."
+            )
+        return PlatformConfig("gitlab", _expand(url).rstrip("/"), _expand(token))
 
-    url = gitlab.get("url") or os.environ.get("MYOPIC_GITLAB_URL") or os.environ.get("GITLAB_URL")
-    token = gitlab.get("token") or os.environ.get("MYOPIC_GITLAB_TOKEN") or os.environ.get("GITLAB_TOKEN")
-
-    if not url or not token:
-        raise ValueError(
-            "myopic is not configured. Set a GitLab URL and token via "
-            f"{config_path()} or the GITLAB_URL / GITLAB_TOKEN environment "
-            "variables. Run `myopic init` to create a config template."
+    if platform == "github":
+        # URL is optional — only GitHub Enterprise needs a base host; the adapter
+        # defaults to public github.com / api.github.com when it's empty.
+        url = (
+            section.get("url")
+            or os.environ.get("MYOPIC_GITHUB_URL")
+            or os.environ.get("GITHUB_URL")
+            or ""
         )
+        token = section.get("token") or os.environ.get("MYOPIC_GITHUB_TOKEN") or os.environ.get("GITHUB_TOKEN")
+        if not token:
+            raise ValueError(
+                "myopic is not configured for GitHub. Set a token via "
+                f"{config_path()} [github] or the GITHUB_TOKEN environment "
+                "variable (a PAT with repo / pull-request read scope)."
+            )
+        return PlatformConfig("github", _expand(url).rstrip("/") if url else "", _expand(token))
 
-    return PlatformConfig(
-        platform="gitlab",
-        url=_expand(url).rstrip("/"),
-        token=_expand(token),
-    )
+    raise ValueError(f"Unknown platform: {platform!r} (expected 'gitlab' or 'github').")

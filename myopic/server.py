@@ -77,10 +77,12 @@ Recommended flow for any non-trivial MR:
      graph + semantic context snapshot in one call.
 
 If a tool returns an "error" about configuration, the user has not set up a
-GitLab URL + token yet. Tell them to run `myopic init` in their terminal — do
-not attempt to configure it yourself.
+token yet. Tell them to run `myopic init` in their terminal — do not attempt to
+configure it yourself.
 
-Currently GitLab merge requests are supported; GitHub pull requests are planned.
+Both GitLab merge requests and GitHub pull requests are supported — pass either
+URL and the right backend is chosen automatically. GitLab needs GITLAB_TOKEN;
+GitHub needs GITHUB_TOKEN.
 """,
 )
 

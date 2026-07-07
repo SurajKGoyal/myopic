@@ -9,10 +9,10 @@
 but nearsighted — it reviews your merge request against the *whole* codebase, not
 just the diff in front of it.
 
-> ⚠️ **Alpha / building in public.** Supports **GitLab merge requests** today
-> (GitHub PRs are next — the platform layer is already abstracted for them). The
-> review tools work now; comment-posting is on the roadmap. Follow along, open
-> issues, pitch in. Don't wire it into a critical workflow just yet.
+> ⚠️ **Alpha / building in public.** Reviews **GitLab merge requests and GitHub
+> pull requests** — pass either URL. The review tools work now; comment-posting
+> is on the roadmap. Follow along, open issues, pitch in. Don't wire it into a
+> critical workflow just yet.
 
 ---
 
@@ -68,8 +68,7 @@ binaries are listed but not expanded. Fetch the rest with `files_filter`.
 **Optional semantic layer** (`myopic[semantic]`) — `index_repo`, `code_search`,
 and the semantic half of `mr_review_context`. See below.
 
-**Planned:** bulk inline-comment posting; GitHub pull requests. See
-[ROADMAP.md](./ROADMAP.md).
+**Planned:** bulk inline-comment posting. See [ROADMAP.md](./ROADMAP.md).
 
 ---
 
@@ -94,6 +93,12 @@ myopic test      # ✓ Authenticated to https://gitlab.com as <you>
 The token is saved to `~/.config/myopic/.env` (chmod 600) and referenced from the
 TOML as `${GITLAB_TOKEN}` — it never lives in the config file. Rotate it any time
 with `myopic set-secret`. Prefer to hand-edit? `myopic init --template`.
+
+**Reviewing GitHub PRs?** myopic reviews GitHub pull requests too — just give it
+a PR URL. It needs a **GitHub token** (a PAT with pull-request read access). Set
+it via `GITHUB_TOKEN` in your environment / the `.env`, or add a `[github]`
+section to `config.toml` (see `myopic init --template`). For GitHub Enterprise,
+set `[github].url` to your instance host. Public github.com needs no URL.
 
 ## Add to your AI client
 

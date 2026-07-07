@@ -119,9 +119,10 @@ def open_review(url: str) -> Review:
 
     Imports are local to keep optional platform SDKs from loading until needed.
     """
+    from myopic.platforms.github import GitHubPlatform
     from myopic.platforms.gitlab import GitLabPlatform
 
-    platforms: list[type[ReviewPlatform]] = [GitLabPlatform]
+    platforms: list[type[ReviewPlatform]] = [GitLabPlatform, GitHubPlatform]
 
     for platform_cls in platforms:
         if platform_cls.handles(url):

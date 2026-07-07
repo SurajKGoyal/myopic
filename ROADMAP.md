@@ -40,8 +40,12 @@ failing. Noise (lockfiles, generated, binary) is listed but not expanded.
 `index_repo`, `code_search`, and the semantic half of `mr_review_context`. Local
 Ollama embeddings (code-specialized model) + embedded LanceDB hybrid search.
 
-**Also:** the platform-abstraction seam (`Review` interface — GitHub is a new
-backend, not a rewrite) and an interactive `myopic init` setup wizard.
+**Both platforms:** GitLab merge requests **and GitHub pull requests** — pass
+either URL and the right backend is chosen automatically. This is what the
+platform-abstraction seam (`Review` interface) was built for: GitHub was a new
+backend (`GitHubPlatform` + `GitHubReview`), not a rewrite of the tools.
+
+**Also:** an interactive `myopic init` setup wizard.
 
 ---
 
@@ -61,10 +65,10 @@ declarations more precisely. **Ideas welcome.**
 
 ## 🔭 Later
 
-### GitHub pull requests
-The platform layer is already abstracted (`myopic/platforms/base.py`). GitHub
-support is a `GitHubPlatform` + `GitHubReview` implementing the same interface —
-the tools don't change. This is why the project isn't named `gitlab-*`.
+### GitHub review-thread resolution
+Inline PR comments are surfaced today, but GitHub only exposes thread-resolution
+status via GraphQL — so `resolved` is reported as `false` for GitHub. Wiring the
+GraphQL call would make it accurate.
 
 ### Other ideas on the table
 - CI/pipeline status + failed-job logs alongside the review.

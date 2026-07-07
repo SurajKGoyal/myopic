@@ -24,14 +24,21 @@ _TEMPLATE = """\
 # myopic config.toml
 # Documentation: https://github.com/SurajKGoyal/myopic
 #
-# myopic needs a GitLab URL and a personal access token with `api` (or at least
-# `read_api`) scope. Keep the token OUT of this file — reference it via ${VAR}
-# and put the value in a sibling .env file (config dir / .env), or export it in
-# your environment.
+# Configure the platform(s) you review on. Keep tokens OUT of this file —
+# reference them via ${VAR} and put the values in a sibling .env (config dir /
+# .env, chmod 600), or export them in your environment.
 
+# GitLab — needs a token with `api` (or `read_api`) scope.
 [gitlab]
 url = "https://gitlab.com"
 token = "${GITLAB_TOKEN}"
+
+# GitHub — needs a token with repo / pull-request read access. Uncomment to use.
+# The `url` is optional: set it only for GitHub Enterprise (its base host),
+# e.g. "https://github.mycompany.com". Public github.com needs no url.
+# [github]
+# token = "${GITHUB_TOKEN}"
+# url = "https://github.mycompany.com"
 """
 
 
