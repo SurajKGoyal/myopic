@@ -14,6 +14,7 @@ from urllib.parse import urlparse
 
 from myopic.config import load_config
 from myopic.platforms.base import (
+    CommentDraft,
     DiffSet,
     Discussion,
     DiscussionSet,
@@ -38,9 +39,18 @@ def _ts(value) -> str:
 class GitHubReview(Review):
     """A handle to one GitHub pull request."""
 
-    def __init__(self, pr, pr_number: int) -> None:
+    platform_name = "github"
+
+    def __init__(self, pr, pr_number: int, token: str = "") -> None:
         self._pr = pr
         self._number = pr_number
+        self._token = token
+
+    def _scrub_error(self, message: str) -> str:
+        """Never let the token leak into a surfaced error message."""
+        if self._token:
+            message = message.replace(self._token, "***")
+        return message
 
     def metadata(self) -> ReviewMetadata:
         commits: list[str] = []
@@ -139,6 +149,28 @@ class GitHubReview(Review):
 
         return DiscussionSet(discussions=discussions, general_comments=general)
 
+    def _post_one(self, comment: CommentDraft) -> None:
+        """Post one inline review comment on the head commit, immediately.
+
+        GitHub takes file-side line + side directly (RIGHT for an added/context
+        line, LEFT for a removed one), anchored to the PR head SHA. Each call is
+        an independent comment, so the driver can post from a queue and retry a
+        single failure without touching the others. Raises on failure.
+        """
+        if comment.new_line is not None:
+            line, side = comment.new_line, "RIGHT"
+        else:
+            line, side = comment.old_line, "LEFT"
+
+        head_sha = getattr(self._pr.head, "sha", "")
+        self._pr.create_review_comment(
+            body=comment.body,
+            commit=head_sha,   # PyGithub accepts a SHA string here
+            path=comment.file_path,
+            line=line,
+            side=side,
+        )
+
 
 class GitHubPlatform(ReviewPlatform):
     """Opens GitHub pull requests from their web URLs."""
@@ -185,4 +217,4 @@ class GitHubPlatform(ReviewPlatform):
                 "Check your token (GITHUB_TOKEN / config [github].token) and repo access."
             ) from exc
 
-        return GitHubReview(pr, number)
+        return GitHubReview(pr, number, token=cfg.token)

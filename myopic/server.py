@@ -17,9 +17,11 @@ from myopic.tools.dependency_impact import dependency_impact as _dependency_impa
 from myopic.tools.diff_lines import mr_diff_lines as _mr_diff_lines
 from myopic.tools.diff_sections import mr_diff_sections as _mr_diff_sections
 from myopic.tools.index_repo import index_repo as _index_repo
+from myopic.tools.post_comments import mr_post_comments as _mr_post_comments
 from myopic.tools.review_context import mr_review_context as _mr_review_context
 from myopic.tools.review_status import mr_review_status as _mr_review_status
 from myopic.tools.trace_call_chain import trace_call_chain as _trace_call_chain
+from myopic.tools.verify_review import mr_verify_review as _mr_verify_review
 
 mcp = FastMCP(
     "myopic",
@@ -68,6 +70,17 @@ server (MYOPIC_OLLAMA_URL, default http://localhost:11434):
    A structure-only result (semantic_available: false) is a fully valid, complete
    response; semantic context is purely additive.
 
+Closing the loop — verify and (on explicit request) comment:
+10. mr_verify_review(url) — read-only. For each existing review thread, shows the
+    diff changes near the commented line, so you can tell what was addressed vs
+    still open without re-reading the whole diff. Use it to re-review after the
+    author pushes follow-up commits.
+11. mr_post_comments(url, comments) — the ONLY mutating tool. Posts inline
+    comments one at a time (queue + exponential backoff, no drafts/bulk-publish).
+    Each comment needs file_path, body, and new_line or old_line — get exact line
+    numbers from mr_diff_lines first. Only call this when the user explicitly asks
+    to post the review; never speculatively.
+
 Recommended flow for any non-trivial MR:
   1. mr_changed_files(url) — see the shape.
   2. mr_diff_sections(url) (large MRs) or mr_diff_lines(url, files_filter=[...batch]) — read the change, token-safe.
@@ -75,6 +88,8 @@ Recommended flow for any non-trivial MR:
      local clone — review the change against everything that depends on it.
   4. (Optional, with myopic[semantic]) mr_review_context(url, root) for a combined
      graph + semantic context snapshot in one call.
+  5. If the user asks to post the review: get line numbers via mr_diff_lines, then
+     mr_post_comments(url, comments). Later, mr_verify_review(url) to confirm.
 
 If a tool returns an "error" about configuration, the user has not set up a
 token yet. Tell them to run `myopic init` in their terminal — do not attempt to
@@ -357,6 +372,57 @@ def mr_review_context(url: str, root: str, max_symbols: int = 8) -> dict:
          semantic_available} or {"error": "..."} on review-open failure.
     """
     return _mr_review_context(url=url, root=root, max_symbols=max_symbols)
+
+
+@mcp.tool()
+def mr_verify_review(url: str, window: int = 40) -> dict:
+    """Check whether each review thread was addressed by nearby diff changes.
+
+    Joins the review's discussions with its current diff: for every inline
+    comment thread, surfaces the add/del lines within +/-window of the commented
+    line. A thread with no nearby changes is a candidate for "not yet addressed";
+    one with changes shows exactly what moved near it — a fast re-review pass
+    without re-reading the whole diff. Read-only. Works on GitLab and GitHub
+    (note: GitHub doesn't expose thread resolution via REST, so rely on
+    has_changes there, not the resolved flag).
+
+    Args:
+        url:    Full merge/pull request URL.
+        window: Lines before/after the commented line to scan (default 40).
+
+    Returns:
+        {mr_number, title, summary{total_threads, resolved, unresolved,
+         threads_with_changes, threads_without_changes}, threads[{...,
+         nearby_changes, has_changes}], threads_no_location[...]}
+    """
+    return _mr_verify_review(url=url, window=window)
+
+
+@mcp.tool()
+def mr_post_comments(url: str, comments: list[dict], max_comments: int = 25) -> dict:
+    """Post inline review comments to a merge/pull request. WRITE — this mutates the review.
+
+    The only mutating tool in myopic. Posts each comment one at a time from a
+    queue, immediately visible (no drafts, no bulk-publish), retrying transient
+    failures (HTTP 429/5xx) with exponential backoff — so partial progress
+    survives a failure and self-hosted rate limits are respected. Works on
+    GitLab and GitHub; the backend translates positions. Only call this on the
+    user's explicit request to post — never speculatively.
+
+    Get exact line numbers first from mr_diff_lines (its lines_filter maps a
+    source line to the diff position). Each comment needs file_path, body, and at
+    least one of new_line (added/unchanged line) or old_line (removed line).
+
+    Args:
+        url:      Full merge/pull request URL.
+        comments: List of {file_path, body, new_line?, old_line?, old_path?}.
+        max_comments: Safety cap per call (default 25); split larger batches.
+
+    Returns:
+        {url, platform, total, posted, failed, published, publish_error,
+         details[{file_path, line, status, error}]} or {"error": "..."}.
+    """
+    return _mr_post_comments(url=url, comments=comments, max_comments=max_comments)
 
 
 def main() -> None:

@@ -10,9 +10,9 @@ but nearsighted — it reviews your merge request against the *whole* codebase, 
 just the diff in front of it.
 
 > ⚠️ **Alpha / building in public.** Reviews **GitLab merge requests and GitHub
-> pull requests** — pass either URL. The review tools work now; comment-posting
-> is on the roadmap. Follow along, open issues, pitch in. Don't wire it into a
-> critical workflow just yet.
+> pull requests** — pass either URL. Reads the change, reviews it against the
+> whole codebase, and can post the review back as inline comments. Follow along,
+> open issues, pitch in. Don't wire it into a critical workflow just yet.
 
 ---
 
@@ -68,7 +68,14 @@ binaries are listed but not expanded. Fetch the rest with `files_filter`.
 **Optional semantic layer** (`myopic[semantic]`) — `index_repo`, `code_search`,
 and the semantic half of `mr_review_context`. See below.
 
-**Planned:** bulk inline-comment posting. See [ROADMAP.md](./ROADMAP.md).
+**Close the loop — verify, and (on request) comment:**
+
+| Tool | What it does |
+|------|--------------|
+| `mr_verify_review` | for each existing review thread, the diff changes near the commented line — did a follow-up commit address it? (read-only) |
+| `mr_post_comments` | **the one write** — post inline comments, one at a time from a queue with exponential backoff (no drafts, no bulk-publish), so partial progress survives and rate limits are respected |
+
+See [ROADMAP.md](./ROADMAP.md) for what's next.
 
 ---
 
@@ -183,8 +190,9 @@ Override the model/endpoint with `MYOPIC_EMBED_MODEL` / `MYOPIC_OLLAMA_URL`.
 
 ## Security
 
-- **Read-only today.** The shipped tools only *read* MR and repo data; nothing
-  posts or mutates. (Comment-posting on the roadmap will be explicit and opt-in.)
+- **One explicit write, everything else read-only.** Only `mr_post_comments`
+  mutates a review, and only when you ask for it — every other tool just reads MR
+  and repo data. The write is never speculative.
 - **Your token stays local.** It lives in your `.env` / environment and is sent
   only to your configured GitLab instance — never to any third party.
 - Auth errors are scrubbed so your token never leaks into error messages.

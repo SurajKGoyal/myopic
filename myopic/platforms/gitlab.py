@@ -14,6 +14,7 @@ import re
 from myopic.config import load_config
 from myopic.diff import count_lines
 from myopic.platforms.base import (
+    CommentDraft,
     DiffSet,
     Discussion,
     DiscussionSet,
@@ -32,11 +33,15 @@ _MR_NUMBER_RE = re.compile(r"merge_requests/(\d+)")
 class GitLabReview(Review):
     """A handle to one GitLab merge request."""
 
+    platform_name = "gitlab"
+
     def __init__(self, mr, mr_number: int) -> None:
         self._mr = mr
         self._number = mr_number
         self._diff_version = None
         self._diff_version_loaded = False
+        self._shas = None
+        self._shas_loaded = False
 
     def _latest_diff_version(self):
         """Fetch (once) the latest diff version object for this MR."""
@@ -165,6 +170,41 @@ class GitLabReview(Review):
             ))
 
         return DiscussionSet(discussions=discussions, general_comments=general)
+
+    def _post_shas(self) -> dict:
+        """Fetch (once) the base/head/start SHAs an inline comment must anchor to."""
+        if not self._shas_loaded:
+            self._shas_loaded = True
+            self._shas = self.diffs().shas or {}
+        return self._shas
+
+    def _post_one(self, comment: CommentDraft) -> None:
+        """Post one inline comment as a resolvable MR discussion, immediately.
+
+        No draft note and no bulk-publish — a positioned `discussions.create`
+        is visible at once, which is what lets the queue post one at a time and
+        preserve partial progress. Raises on failure so the driver can retry.
+        """
+        shas = self._post_shas()
+        if not shas.get("base_sha"):
+            raise RuntimeError(
+                "Could not resolve diff SHAs — needed to position an inline comment."
+            )
+
+        position = {
+            "position_type": "text",
+            "base_sha": shas.get("base_sha", ""),
+            "head_sha": shas.get("head_sha", ""),
+            "start_sha": shas.get("start_sha", ""),
+            "new_path": comment.file_path,
+            "old_path": comment.old_path or comment.file_path,
+        }
+        if comment.new_line:
+            position["new_line"] = comment.new_line
+        if comment.old_line:
+            position["old_line"] = comment.old_line
+
+        self._mr.discussions.create({"body": comment.body, "position": position})
 
 
 class GitLabPlatform(ReviewPlatform):

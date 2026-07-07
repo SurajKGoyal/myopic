@@ -45,16 +45,23 @@ either URL and the right backend is chosen automatically. This is what the
 platform-abstraction seam (`Review` interface) was built for: GitHub was a new
 backend (`GitHubPlatform` + `GitHubReview`), not a rewrite of the tools.
 
+**Close the review loop:**
+
+- **`mr_verify_review(url)`** — read-only. Pairs every existing review thread with
+  the diff changes near its commented line, so a re-review after follow-up commits
+  is one call instead of re-reading the whole diff. Platform-neutral (works on
+  GitHub too, though GitHub doesn't expose thread resolution over REST).
+- **`mr_post_comments(url, comments[])`** — the one mutating tool. Posts inline
+  comments one at a time from a queue, each immediately visible (no drafts, no
+  bulk-publish), retrying transient failures (HTTP 429/5xx) with exponential
+  backoff so partial progress survives and rate limits are respected. Writes are
+  explicit and clearly separated from the read-only tools.
+
 **Also:** an interactive `myopic init` setup wizard.
 
 ---
 
 ## 🔜 Next
-
-### `mr_post_comments(url, comments[])` — explicit, opt-in writes
-Bulk-post inline review comments at exact diff positions (resolved via
-`mr_diff_lines`), rate-limited for self-hosted GitLab. Writes will always be
-explicit and clearly separated from the read-only tools.
 
 ### Sharper changed-symbol selection
 `mr_review_context` currently picks changed symbols by identifier frequency. Using
