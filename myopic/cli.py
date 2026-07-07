@@ -6,6 +6,7 @@ Commands:
   myopic init --template    — write a blank config template for hand-editing
   myopic set-secret         — set or rotate the GitLab token (hidden input)
   myopic test               — verify the configured GitLab connection
+  myopic doctor             — health-check config + the semantic layer (Ollama)
   myopic index [PATH]       — build/refresh the semantic index (cron-friendly)
   (no subcommand)           — start the MCP server when launched by a client
 """
@@ -178,6 +179,134 @@ def index(root: str, force: bool) -> None:
         f"({result['changed_files']} changed, {result['deleted_files']} removed) "
         f"@ {result.get('git_sha') or 'no-git'}"
     )
+
+
+# ---------------------------------------------------------------------------
+# doctor — health-check the setup, including the external Ollama dependency
+# ---------------------------------------------------------------------------
+
+def _ollama_models(url: str) -> list[str]:
+    """Names of models pulled on the Ollama server. Raises if unreachable."""
+    import httpx
+
+    resp = httpx.get(f"{url}/api/tags", timeout=5)
+    resp.raise_for_status()
+    return [m.get("name", "") for m in resp.json().get("models", [])]
+
+
+def _model_present(models: list[str], model: str) -> bool:
+    """True if `model` is among the pulled models (tolerant of an implicit :latest tag)."""
+    base = model.split(":")[0]
+    return any(n == model or n.split(":")[0] == base for n in models)
+
+
+def _pull_model(url: str, model: str) -> None:
+    """Pull an embedding model via Ollama's HTTP API, with a progress bar."""
+    import json
+
+    import httpx
+    from rich.progress import BarColumn, DownloadColumn, Progress, TextColumn
+
+    with Progress(
+        TextColumn("[cyan]{task.description}"), BarColumn(), DownloadColumn(),
+        console=console,
+    ) as prog:
+        task = prog.add_task(f"pulling {model}", total=None)
+        with httpx.stream("POST", f"{url}/api/pull", json={"model": model}, timeout=None) as r:
+            r.raise_for_status()
+            last: dict = {}
+            for line in r.iter_lines():
+                if not line:
+                    continue
+                last = json.loads(line)
+                if last.get("error"):
+                    raise RuntimeError(last["error"])
+                total, completed = last.get("total"), last.get("completed")
+                if total:
+                    prog.update(task, total=total, completed=completed or 0,
+                                description=last.get("status", ""))
+                else:
+                    prog.update(task, description=last.get("status", ""))
+
+
+@cli.command()
+@click.option("--pull/--no-pull", "do_pull", default=None,
+              help="Pull the embedding model if missing (prompts if not specified).")
+def doctor(do_pull: bool | None) -> None:
+    """Check myopic's setup: review-platform config + the optional semantic layer.
+
+    The semantic layer talks to a *local Ollama server* that myopic does not
+    manage — it must be installed, running, and have the embedding model pulled.
+    This command verifies each link in that chain and offers to pull the model.
+    """
+    from myopic.config import embed_model, load_config, ollama_url
+
+    console.print("[bold]myopic doctor[/bold]\n")
+    hard_fail = False
+
+    # 1. Review platform (required for the core tools).
+    console.print("[bold]Review platform[/bold]")
+    configured = False
+    for platform in ("gitlab", "github"):
+        try:
+            cfg = load_config(platform)
+            configured = True
+            console.print(f"  [green]✓[/green] {platform}: configured ({cfg.url or 'github.com'})")
+        except ValueError:
+            console.print(f"  [dim]·[/dim] {platform}: not configured")
+    if not configured:
+        hard_fail = True
+        console.print("  [red]✗[/red] No platform configured — run [cyan]myopic init[/cyan].")
+
+    # 2. Optional semantic layer: extra → Ollama → model.
+    console.print("\n[bold]Semantic layer (optional — graph review works without it)[/bold]")
+    try:
+        import httpx  # noqa: F401
+        import lancedb  # noqa: F401
+    except ImportError:
+        console.print('  [yellow]○[/yellow] extra not installed — '
+                      '[cyan]pip install "myopic[semantic]"[/cyan] to enable semantic search.')
+        _doctor_exit(hard_fail)
+        return
+    console.print("  [green]✓[/green] extra installed (lancedb + httpx)")
+
+    url, model = ollama_url(), embed_model()
+    try:
+        models = _ollama_models(url)
+    except Exception as exc:
+        console.print(f"  [yellow]○[/yellow] Ollama not reachable at [cyan]{url}[/cyan] "
+                      f"({str(exc).splitlines()[0][:70]}).")
+        console.print("     Install & start Ollama (https://ollama.com), or set "
+                      "[cyan]MYOPIC_OLLAMA_URL[/cyan].")
+        _doctor_exit(hard_fail)
+        return
+    console.print(f"  [green]✓[/green] Ollama reachable at {url}")
+
+    if _model_present(models, model):
+        console.print(f"  [green]✓[/green] embedding model pulled: [cyan]{model}[/cyan]")
+    else:
+        console.print(f"  [yellow]○[/yellow] embedding model not pulled: [cyan]{model}[/cyan]")
+        should = do_pull
+        if should is None:
+            should = click.confirm("     Pull it now (~150 MB, one time)?", default=True)
+        if should:
+            try:
+                _pull_model(url, model)
+                console.print(f"  [green]✓[/green] pulled {model}")
+            except Exception as exc:
+                hard_fail = True
+                console.print(f"  [red]✗[/red] pull failed: {str(exc).splitlines()[0][:90]}")
+        else:
+            console.print(f"     Skipped — pull later with [cyan]ollama pull {model}[/cyan].")
+
+    _doctor_exit(hard_fail)
+
+
+def _doctor_exit(hard_fail: bool) -> None:
+    if hard_fail:
+        console.print("\n[red]Some checks failed.[/red]")
+        raise SystemExit(1)
+    console.print("\n[green]All good.[/green]")
 
 
 if __name__ == "__main__":

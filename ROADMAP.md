@@ -67,7 +67,9 @@ backend (`GitHubPlatform` + `GitHubReview`), not a rewrite of the tools.
   backoff so partial progress survives and rate limits are respected. Writes are
   explicit and clearly separated from the read-only tools.
 
-**Also:** an interactive `myopic init` setup wizard.
+**Also:** an interactive `myopic init` setup wizard, and `myopic doctor` — a
+health check for the platform config and the optional semantic layer (Ollama
+reachable? embedding model pulled?) that offers to pull the model for you.
 
 ---
 

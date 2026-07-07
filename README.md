@@ -108,8 +108,9 @@ myopic needs a GitLab URL and a personal access token with `api` (or `read_api`)
 scope. The interactive wizard walks you through it:
 
 ```bash
-~/.venvs/myopic/bin/myopic init   # prompts for URL + token, verifies, saves both
-~/.venvs/myopic/bin/myopic test   # ✓ Authenticated to https://gitlab.com as <you>
+~/.venvs/myopic/bin/myopic init     # prompts for URL + token, verifies, saves both
+~/.venvs/myopic/bin/myopic test     # ✓ Authenticated to https://gitlab.com as <you>
+~/.venvs/myopic/bin/myopic doctor   # health-check config + (if enabled) the semantic layer
 ```
 
 The token is saved to `~/.config/myopic/.env` (chmod 600) and referenced from the
@@ -159,17 +160,35 @@ that depends on them.
 
 For "is this consistent with the rest of the codebase?" — duplication, convention
 drift, similar patterns — enable the semantic layer. It's **opt-in** so the base
-install stays lean (no torch, no heavyweight vector DB):
+install stays lean (no torch, no heavyweight vector DB).
+
+### How it works (and what you provide)
+
+myopic embeds your code **locally** and never sends it to a third party. The
+embeddings come from a [**local Ollama**](https://ollama.com) server that **you**
+run — myopic talks to it over HTTP (`POST /api/embed`); it does **not** bundle,
+launch, or silently download anything. So the semantic layer has three
+prerequisites, and they're a one-time setup:
+
+1. **The extra:** `pip install "myopic[semantic]"` — adds `lancedb` + `httpx` only.
+2. **Ollama running** — install it and make sure it serves on `localhost:11434`
+   (or set `MYOPIC_OLLAMA_URL`).
+3. **The model pulled** — Ollama's HTTP API does *not* auto-pull, so the model
+   must already be present, or every embed call returns a 404.
+
+`myopic doctor` checks all three and **offers to pull the model for you**:
 
 ```bash
-~/.venvs/myopic/bin/pip install "myopic[semantic]"   # adds lancedb + httpx only
-ollama pull unclemusclez/jina-embeddings-v2-base-code   # a small, code-specialized model
+~/.venvs/myopic/bin/pip install "myopic[semantic]"
+~/.venvs/myopic/bin/myopic doctor        # ✓ extra ✓ Ollama ○ model → "Pull it now? (~150 MB)"
 ```
 
-It embeds your code locally via [Ollama](https://ollama.com) and stores it in an
-embedded [LanceDB](https://lancedb.com) index with native hybrid (vector + full-text)
-search. Then the AI can `index_repo` a checked-out repo and `mr_review_context`
-will enrich each changed symbol with semantically similar code. Without the extra,
+Prefer to do it by hand? `ollama pull unclemusclez/jina-embeddings-v2-base-code`.
+
+Under the hood it stores the embeddings in an embedded
+[LanceDB](https://lancedb.com) index with native hybrid (vector + full-text)
+search. The AI then `index_repo`s a checked-out repo and `mr_review_context`
+enriches each changed symbol with semantically similar code. Without the extra,
 `mr_review_context` still works — it just returns the structural (graph) signal.
 
 **Indexing is incremental and freshness-aware.** The first `index_repo` is a full

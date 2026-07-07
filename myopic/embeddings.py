@@ -44,8 +44,8 @@ def embed_texts(texts: list[str]) -> list[list[float]]:
         except httpx.HTTPError as exc:
             raise RuntimeError(
                 f"Could not reach Ollama at {url} to embed text (model={model}): {exc}. "
-                f"Check MYOPIC_OLLAMA_URL and that the model is pulled "
-                f"(`ollama pull {model}`)."
+                f"Run `myopic doctor` to check Ollama and pull the model, or set "
+                f"MYOPIC_OLLAMA_URL / `ollama pull {model}` manually."
             ) from exc
 
         data = resp.json()
