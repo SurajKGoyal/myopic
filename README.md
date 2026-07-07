@@ -158,6 +158,12 @@ a local clone checked out, `dependency_impact` / `trace_call_chain` (or
 `mr_review_context`) on the risky changed symbols to review against everything
 that depends on them.
 
+The graph tools analyze whatever is checked out at `root`, so check out the MR's
+branch first — otherwise you're reviewing the target branch, and the MR's new
+code isn't there. `myopic worktree <mr-url> <repo>` checks out the MR head in a
+throwaway worktree (your main checkout untouched) and prints the path to use as
+`root`. `mr_review_context` also warns when `root` doesn't hold the MR's head.
+
 ---
 
 ## Optional: semantic search (`myopic[semantic]`)

@@ -34,7 +34,13 @@ failing. Noise (lockfiles, generated, binary) is listed but not expanded.
 - **`trace_call_chain(symbol, root)`** — the caller/callee graph of a symbol.
 - **`mr_review_context(url, root)`** — the north star: per changed symbol, its
   structural impact (always) plus semantically similar code (when the optional
-  layer is enabled). Graph-first — structure alone is a valid answer.
+  layer is enabled). Graph-first — structure alone is a valid answer. It also
+  **guards the checkout**: graph tools analyze whatever is at `root`, so it warns
+  when `root` doesn't hold the MR's head (e.g. left on the target branch) — else
+  results silently reflect code without the MR's changes.
+- **`myopic worktree <url> <repo>`** — checks out the MR head in a throwaway git
+  worktree so the graph tools review the MR's actual code, leaving your main
+  checkout untouched.
 
 **Optional semantic layer** (`myopic[semantic]` — lean: lancedb + httpx, no torch):
 `index_repo`, `code_search`, and the semantic half of `mr_review_context`. Local

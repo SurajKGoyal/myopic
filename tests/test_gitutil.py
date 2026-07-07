@@ -70,3 +70,31 @@ class TestGitRepo:
     def test_short(self):
         assert gitutil.short("abcdef1234567890") == "abcdef12"
         assert gitutil.short(None) is None
+
+    def test_commit_present(self, repo):
+        sha = gitutil.head_sha(str(repo))
+        assert gitutil.commit_present(str(repo), sha) is True
+        assert gitutil.commit_present(str(repo), "0" * 40) is False
+        assert gitutil.commit_present(str(repo), "") is False
+
+    def test_add_worktree(self, repo, tmp_path):
+        (repo / "f.txt").write_text("hi", encoding="utf-8")
+        _git(repo, "add", "f.txt")
+        _git(repo, "commit", "-q", "-m", "add f")
+        sha = gitutil.head_sha(str(repo))
+
+        wt = tmp_path / "wt"
+        assert gitutil.add_worktree(str(repo), str(wt), sha) is True
+        assert (wt / "f.txt").read_text() == "hi"
+
+    def test_add_worktree_bad_ref(self, repo, tmp_path):
+        assert gitutil.add_worktree(str(repo), str(tmp_path / "wt2"), "0" * 40) is False
+
+
+class TestNonGitPrimitives:
+    def test_commit_present_non_git(self, tmp_path):
+        assert gitutil.commit_present(str(tmp_path), "0" * 40) is False
+
+    def test_fetch_ref_non_git(self, tmp_path):
+        # No remote / not a repo → False, never raises.
+        assert gitutil.fetch_ref(str(tmp_path), "main") is False

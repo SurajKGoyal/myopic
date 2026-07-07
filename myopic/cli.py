@@ -7,6 +7,7 @@ Commands:
   myopic set-secret         — set or rotate the GitLab token (hidden input)
   myopic test               — verify the configured GitLab connection
   myopic doctor             — health-check config + the semantic layer (Ollama)
+  myopic worktree URL REPO  — check out an MR's branch in an isolated worktree
   myopic index [PATH]       — build/refresh the semantic index (cron-friendly)
   (no subcommand)           — start the MCP server when launched by a client
 """
@@ -18,6 +19,7 @@ from pathlib import Path
 import click
 from rich.console import Console
 
+from myopic import gitutil
 from myopic.config import config_dir, config_path
 
 console = Console()
@@ -294,6 +296,59 @@ def _doctor_exit(hard_fail: bool) -> None:
         console.print("\n[red]Some checks failed.[/red]")
         raise SystemExit(1)
     console.print("\n[green]All good.[/green]")
+
+
+@cli.command()
+@click.argument("url")
+@click.argument("repo", type=click.Path(exists=True, file_okay=False))
+@click.option("--path", "wt_path", default=None,
+              help="Where to create the worktree (default: a sibling dir).")
+def worktree(url: str, repo: str, wt_path: str | None) -> None:
+    """Check out an MR/PR's branch in an isolated worktree for graph review.
+
+    dependency_impact / trace_call_chain / mr_review_context analyze whatever is
+    checked out at their `root`. If your clone is on the target branch, the MR's
+    new code isn't there and results are silently wrong. This puts the MR head in
+    a throwaway worktree — your main checkout stays untouched — and prints the
+    path to pass as `root`.
+    """
+    repo = str(Path(repo).resolve())
+
+    from myopic.platforms.base import open_review
+
+    try:
+        review = open_review(url)
+        meta = review.metadata()
+        head = (review.diffs().shas or {}).get("head_sha")
+    except Exception as exc:
+        console.print(f"[red]✗[/red] could not open review: {str(exc).splitlines()[0][:120]}")
+        raise SystemExit(1) from exc
+    if not head:
+        console.print("[red]✗[/red] could not determine the MR head SHA.")
+        raise SystemExit(1)
+
+    if not gitutil.commit_present(repo, head):
+        console.print(f"Fetching [cyan]{meta.source_branch}[/cyan]…")
+        gitutil.fetch_ref(repo, meta.source_branch)
+    if not gitutil.commit_present(repo, head):
+        console.print(
+            f"[red]✗[/red] MR head {gitutil.short(head)} not found even after fetching "
+            f"{meta.source_branch}. Check the remote and the branch name."
+        )
+        raise SystemExit(1)
+
+    path = wt_path or str(Path(repo).parent / f"{Path(repo).name}__mr{meta.number}")
+    if Path(path).exists():
+        console.print(f"[yellow]{path} already exists[/yellow] — use it as root, or remove it first.")
+        raise SystemExit(0)
+
+    if not gitutil.add_worktree(repo, path, head):
+        console.print(f"[red]✗[/red] `git worktree add` failed at {path}.")
+        raise SystemExit(1)
+
+    console.print(f"[green]✓[/green] worktree at MR head {gitutil.short(head)}: [cyan]{path}[/cyan]")
+    console.print(f"  Pass it as the review root (e.g. mr_review_context(url, root=\"{path}\")).")
+    console.print(f"  Clean up when done: [cyan]git -C {repo} worktree remove --force {path}[/cyan]")
 
 
 if __name__ == "__main__":

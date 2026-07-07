@@ -15,10 +15,30 @@ import re
 from collections import Counter
 from pathlib import Path
 
+from myopic import gitutil
 from myopic.diff import EXT_TO_LANG, parse_hunks
 from myopic.platforms.base import open_review
 from myopic.tools.dependency_impact import dependency_impact
 from myopic.tools.diff_sections import changed_symbols
+
+
+def _check_root_matches_mr(root: str, head_sha: str | None) -> dict | None:
+    """Verify the local clone at `root` actually contains this MR's changes.
+
+    Graph tools analyze whatever is checked out at `root`; if that's the target
+    branch (or any commit without the MR head), results silently reflect code
+    that lacks the MR's changes — new symbols won't be found. Returns a status
+    dict (or None when it can't be checked, e.g. root isn't a git repo).
+    """
+    if not head_sha or not gitutil.is_git_repo(root):
+        return None
+    root_sha = gitutil.head_sha(root)
+    common = {"root_sha": gitutil.short(root_sha), "mr_head": gitutil.short(head_sha)}
+    if not gitutil.commit_present(root, head_sha):
+        return {"ok": False, "state": "mr_head_absent", **common}
+    if root_sha != head_sha:
+        return {"ok": False, "state": "not_checked_out", **common}
+    return {"ok": True, "state": "on_mr_head", **common}
 
 # ---------------------------------------------------------------------------
 # Fallback identifier extraction (only used when AST resolves no changed symbol,
@@ -121,6 +141,9 @@ def mr_review_context(url: str, root: str, max_symbols: int = 8) -> dict:
     meta = review.metadata()
     diff_set = review.diffs()
 
+    # Guard: are we analyzing the MR's code, or whatever happens to be checked out?
+    root_status = _check_root_matches_mr(root, (diff_set.shas or {}).get("head_sha"))
+
     # --- Step 1: real changed symbols (with add-line fallback) ---------------
     top_symbols, symbol_types, symbol_source = _select_changed_symbols(diff_set, max_symbols)
 
@@ -185,6 +208,28 @@ def mr_review_context(url: str, root: str, max_symbols: int = 8) -> dict:
         "symbol_source": symbol_source,
         "semantic_available": semantic_available,
     }
+
+    # Loud warning if the clone doesn't hold the MR's code — graph results would
+    # silently reflect the wrong version (e.g. root left on the target branch).
+    if root_status is not None:
+        result["root_status"] = root_status
+        if not root_status["ok"]:
+            mr_head, root_sha = root_status["mr_head"], root_status["root_sha"]
+            if root_status["state"] == "mr_head_absent":
+                result["warning"] = (
+                    f"The MR head {mr_head} is NOT in the clone at {root} (it's at "
+                    f"{root_sha}). dependency_impact and related results reflect the "
+                    "checked-out code, which is MISSING this MR's changes — new "
+                    f"symbols won't be found. Check out the MR branch, or run "
+                    f"`myopic worktree {url} {root}`, then retry."
+                )
+            else:  # not_checked_out
+                result["warning"] = (
+                    f"The clone at {root} is on {root_sha}, not the MR head {mr_head}. "
+                    "Results reflect the checked-out commit; check out the MR head "
+                    "for exact results."
+                )
+
     if index_state is not None:
         result["index_status"] = index_state
         state = index_state.get("state")

@@ -82,6 +82,11 @@ server (MYOPIC_OLLAMA_URL, default http://localhost:11434):
    enriches each with related_patterns from a semantic search. A structure-only
    result (semantic_available: false) is fully valid; semantic context is
    additive. It also surfaces index_status — if it reports stale, offer a refresh.
+   ROOT MUST HOLD THE MR: it checks whether the MR head is checked out at `root`
+   and returns root_status + a "warning" if not. If you see that warning (clone is
+   on the target branch, MR code absent), STOP — set up the MR branch first with
+   `myopic worktree <url> <repo>` and re-run against the printed path. Otherwise
+   graph results reflect code that lacks the MR's changes.
 
 Closing the loop — verify and (on explicit request) comment:
 11. mr_verify_review(url) — read-only. For each existing review thread, shows the
@@ -405,8 +410,10 @@ def mr_review_context(url: str, root: str, max_symbols: int = 8) -> dict:
         max_symbols: Maximum changed symbols to analyze (default 8).
 
     Returns:
-        {mr_number, symbols[{symbol, impact, related_patterns?}],
-         semantic_available} or {"error": "..."} on review-open failure.
+        {mr_number, symbols[{symbol, impact, related_patterns?}], symbol_source,
+         semantic_available, root_status?, warning?, index_status?} or
+         {"error": "..."}. A "warning" means `root` isn't checked out to the MR —
+         set it up with `myopic worktree <url> <repo>` and re-run against its path.
     """
     return _mr_review_context(url=url, root=root, max_symbols=max_symbols)
 

@@ -60,6 +60,23 @@ def commits_behind(root: str, old_sha: str) -> int | None:
         return None
 
 
+def commit_present(root: str, sha: str) -> bool:
+    """True if `sha` is an object present in the clone at `root`."""
+    if not sha:
+        return False
+    return _run(root, ["cat-file", "-e", f"{sha}^{{commit}}"]) is not None
+
+
+def fetch_ref(root: str, ref: str) -> bool:
+    """`git fetch origin <ref>` — pull a branch so its commits become local."""
+    return _run(root, ["fetch", "origin", ref]) is not None
+
+
+def add_worktree(root: str, path: str, ref: str) -> bool:
+    """Add a detached worktree at `ref` under `path`. No new branch is created."""
+    return _run(root, ["worktree", "add", "--detach", str(path), ref]) is not None
+
+
 def short(sha: str | None, length: int = 8) -> str | None:
     """Short form of a SHA for display, or None passthrough."""
     return sha[:length] if sha else None
