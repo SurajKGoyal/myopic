@@ -9,7 +9,7 @@ diff.** Everything below ladders up to that.
 
 ---
 
-## ✅ Shipped (alpha — v0.0.1)
+## ✅ Shipped (v0.1.0)
 
 **Read the merge request — token-safe on any MR size:**
 

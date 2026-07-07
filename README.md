@@ -13,10 +13,9 @@ just the diff in front of it.
   <img src="https://raw.githubusercontent.com/SurajKGoyal/myopic/main/assets/demo.svg" alt="A small diff changes formatPrice to return a string; a diff-only reviewer says it looks fine, but myopic checks the whole repo and finds 4 callers it breaks plus an existing duplicate — neither visible in the diff." width="720">
 </p>
 
-> ⚠️ **Alpha / building in public.** Reviews **GitLab merge requests and GitHub
-> pull requests** — pass either URL. Reads the change, reviews it against the
-> whole codebase, and can post the review back as inline comments. Follow along,
-> open issues, pitch in. Don't wire it into a critical workflow just yet.
+> **Building in public.** Reviews **GitLab merge requests and GitHub pull
+> requests** — pass either URL. Reads the change, reviews it against the whole
+> codebase, and can post the review back as inline comments. Issues and PRs welcome.
 
 ---
 

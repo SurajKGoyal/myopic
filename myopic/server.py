@@ -31,8 +31,7 @@ myopic is a code-review companion for merge requests. The name is ironic — it'
 anything but nearsighted. Its goal is to review a change against the whole
 codebase, not just the diff in front of it.
 
-Today (alpha) it gives you precise, structured access to a merge request so you
-can review it well:
+It gives you precise, structured access to a merge request so you can review it well:
 1. mr_review_status(url) — see where a review stands: metadata, every discussion
    thread, and what's resolved vs still open. Start here to orient.
 2. mr_changed_files(url) — a content-free manifest of the changed files (paths,
