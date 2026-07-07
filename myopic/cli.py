@@ -2,7 +2,9 @@
 myopic CLI
 
 Commands:
-  myopic init               — write a config template for hand-editing
+  myopic init               — interactive setup wizard (prompt → test → save)
+  myopic init --template    — write a blank config template for hand-editing
+  myopic set-secret         — set or rotate the GitLab token (hidden input)
   myopic test               — verify the configured GitLab connection
   (no subcommand)           — start the MCP server when launched by a client
 """
@@ -57,28 +59,62 @@ def cli(ctx: click.Context) -> None:
 
 
 @cli.command()
-def init() -> None:
-    """Write a config template to the myopic config directory for hand-editing."""
+@click.option("--template", is_flag=True, default=False,
+              help="Write a blank config template for hand-editing instead of running the wizard.")
+def init(template: bool) -> None:
+    """Set up myopic interactively (wizard). Pass --template to hand-edit instead.
+
+    The wizard prompts for your GitLab URL and token, verifies the connection
+    live, then saves the URL to config.toml and the token to a sibling .env
+    (chmod 600) so the secret never lives in the TOML.
+    """
     cfg_dir = config_dir()
     cfg_file = config_path()
 
-    if cfg_file.exists():
-        console.print(
-            f"[yellow]Config already exists:[/yellow] {cfg_file}\n"
-            f"Edit it directly, or delete it and re-run [cyan]myopic init[/cyan]."
-        )
-        raise SystemExit(0)
+    if template:
+        if cfg_file.exists():
+            console.print(
+                f"[yellow]Config already exists:[/yellow] {cfg_file}\n"
+                f"Edit it directly, or delete it and re-run."
+            )
+            raise SystemExit(0)
+        cfg_dir.mkdir(parents=True, exist_ok=True)
+        cfg_file.write_text(_TEMPLATE, encoding="utf-8")
+        console.print(f"[green]Created:[/green] {cfg_file}")
+        console.print()
+        console.print("[bold]Next steps:[/bold]")
+        console.print(f"  1. Create a GitLab token (api scope): [cyan]{_TOKEN_HINT}[/cyan]")
+        console.print(f"  2. Put it in [cyan]{cfg_dir / '.env'}[/cyan] as [cyan]GITLAB_TOKEN=...[/cyan]")
+        console.print(f"  3. Edit [cyan]{cfg_file}[/cyan] if your GitLab URL is self-hosted")
+        console.print(f"  4. Run [cyan]myopic test[/cyan] to verify the connection")
+        return
 
-    cfg_dir.mkdir(parents=True, exist_ok=True)
-    cfg_file.write_text(_TEMPLATE, encoding="utf-8")
-    console.print(f"[green]Created:[/green] {cfg_file}")
-    console.print()
-    console.print("[bold]Next steps:[/bold]")
-    console.print(f"  1. Create a GitLab token (api scope): [cyan]{_TOKEN_HINT}[/cyan]")
-    console.print(f"  2. Put it in [cyan]{cfg_dir / '.env'}[/cyan] as [cyan]GITLAB_TOKEN=...[/cyan]")
-    console.print(f"  3. Edit [cyan]{cfg_file}[/cyan] if your GitLab URL is self-hosted")
-    console.print(f"  4. Run [cyan]myopic test[/cyan] to verify the connection")
-    console.print(f"  5. Add myopic to your MCP client config (see README)")
+    if cfg_file.exists():
+        if not click.confirm(
+            f"Config already exists at {cfg_file}. Reconfigure?", default=False
+        ):
+            console.print(
+                "Left unchanged. Use [cyan]myopic set-secret[/cyan] to rotate just the token."
+            )
+            raise SystemExit(0)
+
+    from myopic._wizard import run_wizard
+    run_wizard(welcome=True)
+
+
+@cli.command("set-secret")
+def set_secret() -> None:
+    """Set or rotate the GitLab token in ~/.config/myopic/.env (hidden input)."""
+    value = click.prompt("GitLab token", hide_input=True, confirmation_prompt=True)
+
+    from myopic._wizard import upsert_env_var
+    from myopic.config import invalidate_config_cache
+
+    upsert_env_var("GITLAB_TOKEN", value)
+    invalidate_config_cache()
+    console.print(
+        f"[green]✓[/green] Saved GITLAB_TOKEN to {config_dir() / '.env'} (chmod 600)"
+    )
 
 
 @cli.command()

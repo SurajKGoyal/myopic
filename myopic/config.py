@@ -46,6 +46,11 @@ def config_path() -> Path:
     return config_dir() / "config.toml"
 
 
+def env_path() -> Path:
+    """Path to the sibling .env file that holds secrets (config dir / .env)."""
+    return config_dir() / ".env"
+
+
 def _load_env_file(env_path: Path) -> None:
     """Load KEY=VALUE pairs from a .env file into os.environ (without overriding)."""
     if not env_path.is_file():
