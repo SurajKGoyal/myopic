@@ -1,6 +1,6 @@
 """Unit tests for the platform-agnostic diff parser. No network required."""
 
-from myopic.diff import count_lines, find_line_mappings, parse_hunks
+from myopic.diff import classify_file, count_lines, find_line_mappings, parse_hunks
 
 SAMPLE_PATCH = """\
 @@ -1,4 +1,5 @@
@@ -79,6 +79,43 @@ class TestParseHunks:
         hunks = parse_hunks(patch)
         assert len(hunks) == 1
         assert len(hunks[0]["lines"]) == 2
+
+
+class TestClassifyFile:
+    def test_lockfiles_are_noise(self):
+        for name in ["package-lock.json", "yarn.lock", "poetry.lock",
+                     "go.sum", "src/pnpm-lock.yaml", "Cargo.lock"]:
+            reviewable, reason = classify_file(name, 500, 500)
+            assert reviewable is False and reason == "lockfile", name
+
+    def test_generated_are_noise(self):
+        for name in ["api/user.pb.go", "proto/user_pb2.py", "app/main.min.js"]:
+            reviewable, reason = classify_file(name, 100, 0)
+            assert reviewable is False and reason == "generated", name
+
+    def test_vendored_and_build_are_noise(self):
+        for name in ["node_modules/react/index.js", "vendor/lib/foo.go",
+                     "app/build/generated/Bar.kt"]:
+            reviewable, reason = classify_file(name, 100, 0)
+            assert reviewable is False and reason == "vendored/build artifact", name
+
+    def test_top_level_vendor_matches(self):
+        reviewable, reason = classify_file("vendor/foo.go", 10, 0)
+        assert reviewable is False and reason == "vendored/build artifact"
+
+    def test_binary_assets_are_noise(self):
+        for name in ["assets/logo.png", "fonts/Inter.woff2", "docs/x.svg"]:
+            reviewable, reason = classify_file(name)
+            assert reviewable is False and reason == "binary/asset", name
+
+    def test_huge_change_is_noise(self):
+        reviewable, reason = classify_file("src/data/seed.ts", 3000, 100)
+        assert reviewable is False and "very large change" in reason
+
+    def test_normal_code_is_reviewable(self):
+        for name in ["src/RideViewModel.kt", "api/user.py", "components/Button.tsx"]:
+            reviewable, reason = classify_file(name, 40, 12)
+            assert reviewable is True and reason is None, name
 
 
 class TestFindLineMappings:

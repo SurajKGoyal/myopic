@@ -24,6 +24,15 @@ dependencies = [
     "python-gitlab>=4.0",
     "click>=8.0",
     "rich>=13.0",
+
+    # AST-aware chunking (mr_diff_sections)
+    "tree-sitter>=0.24.0",
+    "tree-sitter-python>=0.23.0",
+    "tree-sitter-javascript>=0.23.0",
+    "tree-sitter-typescript>=0.23.0",
+    "tree-sitter-java>=0.23.0",
+    "tree-sitter-go>=0.23.0",
+    "tree-sitter-rust>=0.23.0",
 ]
 
 [project.optional-dependencies]

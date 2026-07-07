@@ -10,8 +10,82 @@ inline-comment posting possible.
 from __future__ import annotations
 
 import re
+from pathlib import Path
 
 _HUNK_RE = re.compile(r"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@")
+
+# Extensions -> language for AST-based tools (mr_diff_sections, dependency_impact,
+# trace_call_chain). Only includes languages with tree-sitter support in
+# myopic/ast_chunker.py.
+EXT_TO_LANG: dict[str, str] = {
+    ".py": "python", ".js": "javascript", ".ts": "typescript",
+    ".tsx": "typescript", ".jsx": "javascript", ".java": "java",
+    ".kt": "kotlin", ".kts": "kotlin", ".go": "go", ".rs": "rust",
+}
+
+# Directories to skip during filesystem walks (dependency_impact, trace_call_chain).
+# Superset across all tools — safe to use anywhere.
+SKIP_DIRS: frozenset[str] = frozenset({
+    ".git", "node_modules", "__pycache__", ".venv", "venv", "env",
+    "dist", "build", ".gradle", ".idea", "target", ".mypy_cache",
+    "coverage", ".expo", "Pods", "DerivedData", ".ruff_cache",
+    "coding_agent.egg-info", ".pytest_cache",
+})
+
+# ---------------------------------------------------------------------------
+# File classification — separate reviewer-noise from real code changes.
+#
+# The key to reviewing large MRs without overflowing context: noise files
+# (lockfiles, generated code, vendored/build artifacts, binary assets, or an
+# enormous machine-generated change) are still *listed*, just kept out of the
+# diff body unless explicitly requested. Platform-agnostic — operates on a path.
+# ---------------------------------------------------------------------------
+
+_LOCKFILE_NAMES = {
+    "package-lock.json", "yarn.lock", "pnpm-lock.yaml", "npm-shrinkwrap.json",
+    "composer.lock", "gemfile.lock", "poetry.lock", "pdm.lock", "cargo.lock",
+    "go.sum", "packages.lock.json", "podfile.lock", "flake.lock", "uv.lock",
+}
+_GENERATED_SUFFIXES = (
+    ".min.js", ".min.css", ".map",
+    ".pb.go", "_pb2.py", "_pb2_grpc.py", ".pb.cc", ".pb.h",
+    ".g.dart", ".freezed.dart", ".g.kt", ".generated.ts", ".generated.js",
+)
+_VENDOR_DIR_MARKERS = (
+    "/node_modules/", "/vendor/", "/dist/", "/build/", "/.next/", "/out/",
+    "/target/", "/__generated__/", "/generated/", "/third_party/", "/.gradle/",
+)
+_BINARY_ASSET_SUFFIXES = (
+    ".png", ".jpg", ".jpeg", ".gif", ".ico", ".svg", ".webp", ".pdf",
+    ".woff", ".woff2", ".ttf", ".eot", ".mp4", ".mov", ".zip", ".gz", ".tar",
+    ".jar", ".class", ".so", ".dll", ".dylib", ".bin", ".snap",
+)
+# A single-file change bigger than this is almost always machine-generated.
+_HUGE_CHANGE_LINES = 2000
+
+
+def classify_file(path: str, additions: int = 0, deletions: int = 0) -> tuple[bool, str | None]:
+    """Classify a changed file as reviewable code vs reviewer-noise.
+
+    Returns (reviewable, skip_reason); skip_reason is None when reviewable.
+    Never drops a file — it only lets callers keep noise out of the token-bounded
+    diff body while still listing it in the manifest.
+    """
+    p = path.lower()
+    name = Path(p).name
+    marker = "/" + p  # so a top-level "vendor/x" still matches "/vendor/"
+
+    if name in _LOCKFILE_NAMES:
+        return False, "lockfile"
+    if p.endswith(_GENERATED_SUFFIXES):
+        return False, "generated"
+    if any(m in marker for m in _VENDOR_DIR_MARKERS):
+        return False, "vendored/build artifact"
+    if p.endswith(_BINARY_ASSET_SUFFIXES):
+        return False, "binary/asset"
+    if additions + deletions > _HUGE_CHANGE_LINES:
+        return False, f"very large change ({additions + deletions} lines, likely generated)"
+    return True, None
 
 
 def count_lines(patch: str) -> tuple[int, int]:

@@ -9,7 +9,9 @@ mappings you need instead of the entire diff, keeping the payload small.
 
 from __future__ import annotations
 
-from myopic.diff import count_lines, find_line_mappings, parse_hunks
+import json
+
+from myopic.diff import classify_file, count_lines, find_line_mappings, parse_hunks
 from myopic.platforms.base import open_review
 
 
@@ -17,6 +19,8 @@ def mr_diff_lines(
     url: str,
     files_filter: list[str] | None = None,
     lines_filter: dict[str, list[int]] | None = None,
+    max_chars: int = 80000,
+    skip_noise: bool = True,
 ) -> dict:
     """
     Fetch a merge/pull request diff and return structured line-level data.
@@ -54,9 +58,18 @@ def mr_diff_lines(
             lines_filter.keys() if lines_filter else []
         )
 
+    # An explicit filter is an intentional targeted fetch — honor it fully: no
+    # noise-skipping and no budget truncation, or the caller can't get what they
+    # asked for. Noise/budget guards only apply to an untargeted full fetch.
+    targeted = bool(combined_filter)
+
     files: list[dict] = []
+    omitted_files: list[dict] = []   # reviewable but cut for the budget — refetch via files_filter
+    skipped_files: list[dict] = []   # noise — kept out of the body
     total_adds = 0
     total_dels = 0
+    used_chars = 0
+    budget_hit = False
 
     for fd in diff_set.files:
         file_path = fd.file_path
@@ -69,6 +82,22 @@ def mr_diff_lines(
         additions, deletions = count_lines(fd.patch)
         total_adds += additions
         total_dels += deletions
+
+        if not targeted:
+            reviewable, skip_reason = classify_file(file_path, additions, deletions)
+            if skip_noise and not reviewable:
+                skipped_files.append({
+                    "file_path": file_path, "additions": additions,
+                    "deletions": deletions, "reason": skip_reason,
+                })
+                continue
+            if budget_hit:
+                omitted_files.append({
+                    "file_path": file_path, "additions": additions,
+                    "deletions": deletions, "reason": "token budget reached",
+                })
+                continue
+
         hunks = parse_hunks(fd.patch)
 
         if lines_filter:
@@ -80,19 +109,35 @@ def mr_diff_lines(
                 "file_path": file_path,
                 "line_mappings": find_line_mappings(hunks, target_lines),
             })
-        else:
-            files.append({
-                "file_path": file_path,
-                "old_path": fd.old_path,
-                "new_file": fd.new_file,
-                "deleted_file": fd.deleted_file,
-                "renamed_file": fd.renamed_file,
-                "additions": additions,
-                "deletions": deletions,
-                "hunks": hunks,
-            })
+            continue
 
-    return {
+        file_entry = {
+            "file_path": file_path,
+            "old_path": fd.old_path,
+            "new_file": fd.new_file,
+            "deleted_file": fd.deleted_file,
+            "renamed_file": fd.renamed_file,
+            "additions": additions,
+            "deletions": deletions,
+            "hunks": hunks,
+        }
+
+        # Budget check (untargeted only). Always emit at least one file so a single
+        # over-budget file still returns something rather than an empty result.
+        if not targeted:
+            entry_chars = len(json.dumps(file_entry))
+            if files and used_chars + entry_chars > max_chars:
+                budget_hit = True
+                omitted_files.append({
+                    "file_path": file_path, "additions": additions,
+                    "deletions": deletions, "reason": "token budget reached",
+                })
+                continue
+            used_chars += entry_chars
+
+        files.append(file_entry)
+
+    result = {
         "mr_number": meta.number,
         "title": meta.title,
         "author": meta.author,
@@ -102,9 +147,21 @@ def mr_diff_lines(
         "commits": meta.commits,
         "diff_shas": diff_set.shas,
         "files": files,
+        "truncated": budget_hit,
+        "omitted_files": omitted_files,
+        "skipped_files": skipped_files,
         "stats": {
-            "total_files": len(files),
+            "files_returned": len(files),
+            "files_omitted": len(omitted_files),
+            "files_skipped": len(skipped_files),
             "total_additions": total_adds,
             "total_deletions": total_dels,
         },
     }
+    if budget_hit:
+        result["next"] = (
+            f"Output hit the {max_chars}-char budget; {len(omitted_files)} file(s) "
+            "not returned. Fetch them with "
+            "mr_diff_lines(url, files_filter=[<file_path from omitted_files>, ...])."
+        )
+    return result
