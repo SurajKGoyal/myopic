@@ -115,7 +115,14 @@ pull-request read access) in your environment or a `[github]` section in
 
 ## Add to your AI client
 
-Point any MCP client — Claude Code, Cursor, Claude Desktop — at the `myopic`
+**Claude Code** — one command, no config editing:
+
+```
+/plugin marketplace add SurajKGoyal/myopic-marketplace
+/plugin install myopic@myopic
+```
+
+**Any other MCP client** (Cursor, Claude Desktop, …) — point it at the `myopic`
 command:
 
 ```json
