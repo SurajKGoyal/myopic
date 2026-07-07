@@ -141,3 +141,6 @@ pytest                 # diff-parser unit tests, no network needed
 ## License
 
 MIT © Suraj Goyal
+
+<!-- MCP Registry ownership marker — do not remove. -->
+mcp-name: io.github.SurajKGoyal/myopic
