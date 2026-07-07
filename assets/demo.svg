@@ -1,0 +1,91 @@
+<svg viewBox="0 0 720 560" xmlns="http://www.w3.org/2000/svg" font-family="ui-sans-serif, -apple-system, Segoe UI, Roboto, sans-serif" role="img">
+  <title>myopic — reviews your change against the whole codebase, not just the diff</title>
+  <desc>A small diff changes formatPrice to return a string instead of a number. A diff-only reviewer sees only the patch and says it looks fine. myopic runs dependency_impact and code_search against the whole repo: 12 callers, 4 of which do arithmetic on the result (now broken), and a duplicate formatMoney already exists. The real bug and the duplication are invisible in the diff alone.</desc>
+
+  <defs>
+    <style>
+      .frame { fill:#14161c; stroke:#2a2f3a; stroke-width:1.5; }
+      .bar   { fill:#1b1e26; }
+      .title { fill:#e6edf3; font-weight:700; }
+      .muted { fill:#8b949e; }
+      .panel { fill:#0f1117; stroke:#242a33; stroke-width:1; }
+      .bub   { fill:#161b22; stroke:#242a33; stroke-width:1; }
+      .mono  { font-family:ui-monospace, SFMono-Regular, Menlo, monospace; }
+      .tl    { fill:#4dd0c4; font-weight:700; letter-spacing:.03em; }
+      .ai    { fill:#58a6ff; font-weight:700; }
+      .add   { fill:#3fb950; }
+      .del   { fill:#f85149; }
+      .hl    { fill:#ffd166; font-weight:700; }
+      .ok    { fill:#3fb950; font-weight:700; }
+      .bad   { fill:#f85149; font-weight:700; }
+      .tag   { fill:#e6edf3; font-weight:700; }
+      .reveal{ opacity:0; }
+    </style>
+  </defs>
+
+  <rect class="frame" x="8" y="8" width="704" height="544" rx="14"/>
+  <rect class="bar" x="8" y="8" width="704" height="40" rx="14"/>
+  <rect class="bar" x="8" y="30" width="704" height="18"/>
+  <circle cx="30" cy="28" r="5" fill="#ff5f57"/>
+  <circle cx="48" cy="28" r="5" fill="#febc2e"/>
+  <circle cx="66" cy="28" r="5" fill="#28c840"/>
+  <text x="360" y="32" text-anchor="middle" class="title" font-size="14">myopic — code review that sees the whole codebase</text>
+
+  <!-- architecture chain — always visible -->
+  <text x="360" y="70" text-anchor="middle" font-size="12.5">
+    <tspan class="muted" font-weight="700">You</tspan><tspan fill="#5a6270">   &#10230;   </tspan><tspan class="ai">AI agent</tspan><tspan fill="#5a6270">   &#10230;   </tspan><tspan class="tl">myopic</tspan><tspan class="muted"> (MCP) </tspan><tspan fill="#5a6270">  &#10230;   </tspan><tspan class="ok">your MR + repo</tspan>
+  </text>
+  <line x1="40" y1="84" x2="680" y2="84" stroke="#23272f" stroke-width="1"/>
+
+  <!-- STEP 1: the diff -->
+  <g class="reveal"><animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.02;0.04;0.95;1" dur="18s" repeatCount="indefinite"/>
+    <text x="32" y="106" class="del" font-weight="700" font-size="12">&#9679; THE DIFF &#183; all a diff-only reviewer sees</text>
+  </g>
+
+  <g class="reveal"><animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.06;0.09;0.95;1" dur="18s" repeatCount="indefinite"/>
+    <rect class="panel" x="32" y="116" width="656" height="104" rx="10"/>
+    <rect x="36" y="152" width="648" height="22" fill="#f85149" opacity="0.09"/>
+    <rect x="36" y="176" width="648" height="22" fill="#3fb950" opacity="0.10"/>
+    <text x="52" y="140" class="mono muted" font-size="13">  function formatPrice(cents) {</text>
+    <text x="52" y="168" class="mono del"   font-size="13">-   return cents / 100</text>
+    <text x="52" y="192" class="mono add"   font-size="13">+   return "$" + cents / 100</text>
+    <text x="52" y="214" class="mono muted" font-size="13">  }</text>
+  </g>
+
+  <g class="reveal"><animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.15;0.18;0.95;1" dur="18s" repeatCount="indefinite"/>
+    <rect class="bub" x="32" y="230" width="656" height="34" rx="9"/>
+    <text x="48" y="252" font-size="13.5"><tspan class="ai">diff-only reviewer  </tspan><tspan class="muted">"looks fine &#8212; ship it" </tspan><tspan class="ok">&#10003;</tspan><tspan class="muted" font-size="12">    &#8212; it only saw the patch</tspan></text>
+  </g>
+
+  <!-- STEP 2: whole codebase -->
+  <g class="reveal"><animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.30;0.32;0.95;1" dur="18s" repeatCount="indefinite"/>
+    <text x="32" y="298" class="tl" font-size="12">&#9679; MYOPIC &#183; the same change, against the whole repo</text>
+  </g>
+
+  <g class="reveal"><animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.36;0.39;0.95;1" dur="18s" repeatCount="indefinite"/>
+    <rect class="bub" x="32" y="308" width="656" height="32" rx="9"/>
+    <text x="48" y="329" font-size="13"><tspan class="ai">AI  </tspan><tspan class="tl mono">myopic&#183;dependency_impact</tspan><tspan class="mono muted"> formatPrice </tspan><tspan class="muted">&#8594; </tspan><tspan class="tag">12 callers</tspan></text>
+  </g>
+
+  <g class="reveal"><animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.44;0.47;0.95;1" dur="18s" repeatCount="indefinite"/>
+    <rect x="32" y="346" width="656" height="32" rx="9" fill="#3a2f10" stroke="#5c4a18" stroke-width="1"/>
+    <text x="48" y="367" font-size="13"><tspan class="hl">&#9888;  4 do </tspan><tspan class="mono hl">total + formatPrice(x)</tspan><tspan class="hl"> &#8594; the number is now a string</tspan></text>
+  </g>
+
+  <g class="reveal"><animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.52;0.55;0.95;1" dur="18s" repeatCount="indefinite"/>
+    <rect class="bub" x="32" y="384" width="656" height="32" rx="9"/>
+    <text x="48" y="405" font-size="13"><tspan class="ai">AI  </tspan><tspan class="tl mono">myopic&#183;code_search</tspan><tspan class="muted"> &#8594; </tspan><tspan class="mono tag">formatMoney()</tspan><tspan class="muted"> already exists &#8212; this is a duplicate</tspan></text>
+  </g>
+
+  <!-- verdict -->
+  <g class="reveal"><animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.62;0.65;0.95;1" dur="18s" repeatCount="indefinite"/>
+    <rect x="32" y="428" width="656" height="38" rx="10" fill="#10201e" stroke="#2f5b55" stroke-width="1.5"/>
+    <text x="48" y="452" font-size="14"><tspan class="bad">&#10007;  A real bug and a duplicate</tspan><tspan class="tag"> &#8212; neither shows up in the diff.</tspan></text>
+  </g>
+
+  <!-- tagline -->
+  <g class="reveal"><animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.72;0.75;0.95;1" dur="18s" repeatCount="indefinite"/>
+    <text x="360" y="500" text-anchor="middle" class="tag" font-size="15.5">Reviews your change against the <tspan class="tl">whole codebase</tspan> — not just the diff.</text>
+    <text x="360" y="524" text-anchor="middle" class="muted" font-size="11.5" letter-spacing=".05em">GitLab &#183; GitHub &#183; graph + semantic context &#183; an MCP server for AI code review</text>
+  </g>
+</svg>
