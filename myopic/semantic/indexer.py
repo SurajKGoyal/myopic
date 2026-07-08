@@ -229,14 +229,16 @@ def _freshness(meta: dict, model: str, cur_sha: str | None, dirty: bool) -> tupl
 def index_status(root: str) -> dict:
     """Report whether a repo's semantic index is fresh, stale, or absent.
 
-    Freshness is keyed to the git commit the index was built from (not wall
-    time): if HEAD has moved, the index is "stale" and reports how many commits
-    behind. A changed embedding model is "model_mismatch". Repos indexed by an
-    older myopic (no sidecar) report "unknown".
+    Freshness is measured against the repo's MAIN line (origin's default branch,
+    else local main/master), not the current checkout: if main has moved past the
+    indexed commit, the index is "stale" and reports how many commits behind.
+    Reviewing a feature-branch worktree does NOT mark it stale. A changed
+    embedding model is "model_mismatch"; an older index without metadata is
+    "unknown".
 
-    Returns one of state = absent | fresh | stale | model_mismatch | unknown,
-    plus context fields. Raises RuntimeError if the semantic extra is missing —
-    the tool wrapper converts that to {"error": ...}.
+    Returns state = absent | fresh | stale | model_mismatch | unknown, plus
+    context (compared_against, checkout_sha, indexed_sha, commits_behind). Raises
+    RuntimeError if the semantic extra is missing — the wrapper converts it.
     """
     root_path = str(Path(root).resolve())
     idx = CodeIndex.connect(root_path)
@@ -245,13 +247,25 @@ def index_status(root: str) -> dict:
         return {"state": "absent", "root": root_path}
 
     model = embed_model()
-    cur_sha = gitutil.head_sha(root_path)
+    # Freshness is measured against the repo's MAIN line, not the current
+    # checkout — so reviewing a feature-branch worktree doesn't make the index
+    # look stale. Only when main has actually moved past the indexed commit do we
+    # report "stale". Falls back to the checkout HEAD for repos without a
+    # resolvable default branch (or non-git dirs).
+    default_ref = gitutil.default_branch_ref(root_path)
+    main_sha = gitutil.sha_of(root_path, default_ref) if default_ref else None
+    compare_sha = main_sha or gitutil.head_sha(root_path)
+    # A worktree's uncommitted changes don't reflect main; only weigh dirtiness
+    # in the fallback (checkout-based) mode.
     dirty = gitutil.is_dirty(root_path)
+    dirty_for_decision = dirty if main_sha is None else False
+
     out: dict = {
         "root": root_path,
         "chunks": idx.row_count(),
         "current_model": model,
-        "current_sha": gitutil.short(cur_sha),
+        "compared_against": gitutil.short(compare_sha),
+        "checkout_sha": gitutil.short(gitutil.head_sha(root_path)),
         "dirty": dirty,
     }
 
@@ -268,10 +282,12 @@ def index_status(root: str) -> dict:
     out["indexed_sha"] = gitutil.short(meta.get("git_sha"))
     out["indexed_model"] = meta.get("model")
 
-    state, reason, needs_behind = _freshness(meta, model, cur_sha, dirty)
+    state, reason, needs_behind = _freshness(meta, model, compare_sha, dirty_for_decision)
     out["state"] = state
     if reason:
         out["reason"] = reason
     if needs_behind:
-        out["commits_behind"] = gitutil.commits_behind(root_path, meta.get("git_sha"))
+        out["commits_behind"] = gitutil.commits_behind(
+            root_path, meta.get("git_sha"), default_ref or "HEAD"
+        )
     return out

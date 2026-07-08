@@ -201,8 +201,10 @@ Without the extra, `mr_review_context` still returns the structural (graph) sign
 **Indexing is incremental and freshness-aware.** The first `index_repo` is a full
 build; after that only files whose content changed are re-embedded, so refreshing
 is cheap. `index_status(root)` reports whether the index is fresh, `stale` (with
-how many commits behind HEAD), or built on a different model — freshness is keyed
-to the git commit it was indexed from, not wall-clock time. `code_search` and
+how many commits behind main), or built on a different model — freshness is
+measured against the repo's **main line**, not the current checkout, so reviewing
+a feature branch never marks the index stale; only main actually moving does.
+`code_search` and
 `mr_review_context` carry that status so a stale index never silently degrades a
 review; the AI is told to offer a refresh when it's stale.
 

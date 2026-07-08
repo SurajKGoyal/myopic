@@ -91,6 +91,15 @@ class TestGitRepo:
         assert gitutil.add_worktree(str(repo), str(tmp_path / "wt2"), "0" * 40) is False
 
 
+    def test_sha_of(self, repo):
+        assert gitutil.sha_of(str(repo), "HEAD") == gitutil.head_sha(str(repo))
+        assert gitutil.sha_of(str(repo), "no-such-ref") is None
+
+    def test_default_branch(self, repo):
+        ref = gitutil.default_branch_ref(str(repo))
+        assert ref in ("main", "master")   # local default branch
+        assert gitutil.default_branch_sha(str(repo)) == gitutil.head_sha(str(repo))
+
     def test_common_dir_shared_by_clone_and_worktree(self, repo, tmp_path):
         (repo / "f.txt").write_text("x", encoding="utf-8")
         _git(repo, "add", "f.txt")

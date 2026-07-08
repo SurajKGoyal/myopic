@@ -88,7 +88,7 @@ class TestIncrementalIndex:
         assert st["state"] == "fresh"
 
         monkeypatch.setattr(ix.gitutil, "head_sha", lambda root: "sha2")
-        monkeypatch.setattr(ix.gitutil, "commits_behind", lambda root, old: 3)
+        monkeypatch.setattr(ix.gitutil, "commits_behind", lambda root, old, ref="HEAD": 3)
         st2 = ix.index_status(str(repo))
         assert st2["state"] == "stale" and st2["commits_behind"] == 3
 
@@ -103,3 +103,23 @@ class TestIncrementalIndex:
         ix.index_repo(str(repo))
         r = ix.index_repo(str(repo), force=True)
         assert r["mode"] == "full"
+
+    def test_freshness_tracks_main_not_checkout(self, monkeypatch, tmp_path):
+        """A feature-branch checkout stays 'fresh'; only main moving marks stale."""
+        ix, repo = self._prep(monkeypatch, tmp_path)
+        # Index while main = M1 (git_sha stored from head_sha).
+        monkeypatch.setattr(ix.gitutil, "head_sha", lambda root: "M1")
+        monkeypatch.setattr(ix.gitutil, "default_branch_ref", lambda root: "main")
+        monkeypatch.setattr(ix.gitutil, "sha_of", lambda root, ref: "M1")
+        ix.index_repo(str(repo))
+
+        # Now HEAD is a feature branch (FEAT), but main is still M1.
+        monkeypatch.setattr(ix.gitutil, "head_sha", lambda root: "FEAT")
+        st = ix.index_status(str(repo))
+        assert st["state"] == "fresh"        # checkout differs, but main matches
+
+        # main advances to M2 → stale, with commits-behind against main.
+        monkeypatch.setattr(ix.gitutil, "sha_of", lambda root, ref: "M2")
+        monkeypatch.setattr(ix.gitutil, "commits_behind", lambda root, old, ref="HEAD": 2)
+        st2 = ix.index_status(str(repo))
+        assert st2["state"] == "stale" and st2["commits_behind"] == 2

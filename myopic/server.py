@@ -67,10 +67,11 @@ server (MYOPIC_OLLAMA_URL, default http://localhost:11434):
    first run is a full build; after that only changed files are re-embedded, so
    refreshing is cheap. force=True rebuilds everything. Returns {mode,
    indexed_chunks, changed_files, ...}.
-8. index_status(root) — is the index fresh, stale, or absent? Freshness is keyed
-   to the git commit it was built from ("stale" reports commits_behind). Check
-   this before leaning on semantic results; if stale, ASK THE USER whether to
-   index_repo(root) first (it's incremental — usually seconds).
+8. index_status(root) — is the index fresh, stale, or absent? Freshness is
+   measured against the repo's MAIN line, not the checkout, so reviewing a feature
+   branch stays "fresh"; only main moving past the indexed commit is "stale"
+   (reports commits_behind). Check this before leaning on semantic results; if
+   stale, ASK THE USER whether to index_repo(root) first (incremental, seconds).
 9. code_search(query, root) — hybrid vector + full-text search over an indexed
    repo. Use to find patterns, conventions, or examples before reviewing a new
    implementation. Its result carries index_status so you can see staleness.

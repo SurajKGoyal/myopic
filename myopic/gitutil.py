@@ -30,10 +30,31 @@ def _run(root: str, args: list[str]) -> str | None:
     return result.stdout.strip()
 
 
+def sha_of(root: str, ref: str) -> str | None:
+    """Resolve a ref to its full commit SHA, or None if it doesn't exist."""
+    return _run(root, ["rev-parse", "--verify", "--quiet", ref]) or None
+
+
 def head_sha(root: str) -> str | None:
     """Full SHA of HEAD, or None if root isn't a git repo / git is unavailable."""
-    sha = _run(root, ["rev-parse", "HEAD"])
-    return sha or None
+    return sha_of(root, "HEAD")
+
+
+def default_branch_ref(root: str) -> str | None:
+    """The ref name of the repo's main line — origin's default branch if known,
+    else a local main/master. This is what a code index's freshness is measured
+    against, so reviewing a feature branch doesn't make the index look stale.
+    """
+    for ref in ("origin/HEAD", "origin/main", "origin/master", "main", "master"):
+        if _run(root, ["rev-parse", "--verify", "--quiet", ref]) is not None:
+            return ref
+    return None
+
+
+def default_branch_sha(root: str) -> str | None:
+    """SHA of the repo's main line (see default_branch_ref), or None."""
+    ref = default_branch_ref(root)
+    return sha_of(root, ref) if ref else None
 
 
 def is_dirty(root: str) -> bool:
@@ -42,8 +63,9 @@ def is_dirty(root: str) -> bool:
     return bool(out)
 
 
-def commits_behind(root: str, old_sha: str) -> int | None:
-    """How many commits HEAD is ahead of old_sha (old_sha..HEAD).
+def commits_behind(root: str, old_sha: str, ref: str = "HEAD") -> int | None:
+    """How many commits `ref` is ahead of old_sha (old_sha..ref); ref defaults
+    to HEAD but is typically the main line (e.g. origin/main).
 
     Returns None if old_sha is unknown to the repo (e.g. history was rewritten
     or the commit isn't present), so callers can distinguish "can't tell" from
@@ -51,7 +73,7 @@ def commits_behind(root: str, old_sha: str) -> int | None:
     """
     if not old_sha:
         return None
-    out = _run(root, ["rev-list", "--count", f"{old_sha}..HEAD"])
+    out = _run(root, ["rev-list", "--count", f"{old_sha}..{ref}"])
     if out is None:
         return None
     try:
