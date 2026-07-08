@@ -13,6 +13,7 @@ import json
 
 from myopic.diff import classify_file, count_lines, find_line_mappings, parse_hunks
 from myopic.platforms.base import open_review
+from myopic.tools.hints import REVIEW_AGAINST_CODEBASE
 
 
 def mr_diff_lines(
@@ -162,6 +163,9 @@ def mr_diff_lines(
         result["next"] = (
             f"Output hit the {max_chars}-char budget; {len(omitted_files)} file(s) "
             "not returned. Fetch them with "
-            "mr_diff_lines(url, files_filter=[<file_path from omitted_files>, ...])."
+            "mr_diff_lines(url, files_filter=[<file_path from omitted_files>, ...]). "
+            "Once you have the diff, " + REVIEW_AGAINST_CODEBASE
         )
+    else:
+        result["next"] = REVIEW_AGAINST_CODEBASE
     return result

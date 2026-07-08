@@ -82,8 +82,10 @@ def mr_changed_files(url: str) -> dict:
             "reviewable_deletions": review_dels,
         },
         "next": (
-            "Fetch diffs in priority order via "
-            "mr_diff_lines(url, files_filter=[<file_path>, ...]) — batch the reviewable "
-            "files; noise files (skip_reason set) can be pulled explicitly if needed."
+            "Read the change: mr_diff_sections(url) (large MRs) or "
+            "mr_diff_lines(url, files_filter=[<file_path>, ...]) to batch the reviewable "
+            "files. THEN review it against the whole codebase — mr_review_context(url, "
+            "root) on a local checkout gives each changed symbol's blast radius (no "
+            "index needed). Reading the diff alone is only half a review."
         ),
     }

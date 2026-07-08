@@ -156,3 +156,18 @@ class TestDiffSectionsBudgetAndNoise:
 
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-q"]))
+
+
+class TestReviewContextNudge:
+    def test_points_to_review_context(self, monkeypatch):
+        _install(monkeypatch, [_file("src/greet.py", _new_file_patch(), new_file=True)])
+        out = diff_sections_mod.mr_diff_sections("u")
+        assert out["truncated"] is False
+        assert "mr_review_context" in out["next"]
+
+    def test_truncated_keeps_both_hints(self, monkeypatch):
+        files = [_file(f"src/file{i}.py", _padding_patch(120), new_file=True) for i in range(10)]
+        _install(monkeypatch, files)
+        out = diff_sections_mod.mr_diff_sections("u", max_chars=500)
+        assert out["truncated"] is True
+        assert "files_filter" in out["next"] and "mr_review_context" in out["next"]

@@ -130,3 +130,28 @@ class TestDiffLinesBudget:
 
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-q"]))
+
+
+# ---------------------------------------------------------------------------
+# self-guiding "next" hints — the tools point on to whole-codebase review
+# ---------------------------------------------------------------------------
+
+class TestReviewContextNudge:
+    def test_changed_files_points_to_review_context(self, monkeypatch):
+        _install(monkeypatch, [_file("a.py", 3)])
+        out = changed_files_mod.mr_changed_files("u")
+        assert "mr_review_context" in out["next"]
+
+    def test_diff_lines_points_to_review_context(self, monkeypatch):
+        _install(monkeypatch, [_file("a.py", 3)])
+        out = diff_lines_mod.mr_diff_lines("u")
+        assert out["truncated"] is False
+        assert "mr_review_context" in out["next"]
+
+    def test_diff_lines_truncated_keeps_both_hints(self, monkeypatch):
+        # many oversized files force a budget hit; the next hint must carry
+        # BOTH the omitted-files instruction and the review-context nudge.
+        _install(monkeypatch, [_file(f"f{i}.py", 400) for i in range(6)])
+        out = diff_lines_mod.mr_diff_lines("u", max_chars=500)
+        assert out["truncated"] is True
+        assert "files_filter" in out["next"] and "mr_review_context" in out["next"]

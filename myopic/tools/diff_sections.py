@@ -23,6 +23,7 @@ from myopic.ast_chunker import ast_chunk
 from myopic.diff import EXT_TO_LANG, classify_file, count_lines, parse_hunks
 from myopic.platforms.base import open_review
 from myopic.symbol_patterns import DECL_PATTERNS
+from myopic.tools.hints import REVIEW_AGAINST_CODEBASE
 
 # Matches the function context hint appended after @@ -x,y +x,y @@
 _HUNK_HDR_RE = re.compile(r"^@@ [^@]+ @@ ?(.+)?$")
@@ -189,8 +190,11 @@ def mr_diff_sections(
         result["next"] = (
             f"Output hit the {max_chars}-char budget; {len(omitted_files)} file(s) "
             "were not expanded. Fetch them with "
-            "mr_diff_sections(url, files_filter=[<file_path from omitted_files>, ...])."
+            "mr_diff_sections(url, files_filter=[<file_path from omitted_files>, ...]). "
+            "Once you have the diff, " + REVIEW_AGAINST_CODEBASE
         )
+    else:
+        result["next"] = REVIEW_AGAINST_CODEBASE
     return result
 
 
