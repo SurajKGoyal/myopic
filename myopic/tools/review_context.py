@@ -143,20 +143,34 @@ def mr_review_context(url: str, root: str, max_symbols: int = 8) -> dict:
 
     # Guard: are we analyzing the MR's code, or whatever happens to be checked out?
     root_status = _check_root_matches_mr(root, (diff_set.shas or {}).get("head_sha"))
+    root_ok = root_status is None or root_status.get("ok", False)
 
     # --- Step 1: real changed symbols (with add-line fallback) ---------------
     top_symbols, symbol_types, symbol_source = _select_changed_symbols(diff_set, max_symbols)
 
-    # --- Step 2: probe semantic availability + index freshness ---------------
+    # --- Step 2: semantic availability + (auto) index + freshness ------------
     semantic_available = False
     index_state: dict | None = None
     _semantic_index = None
     _embed_texts = None
 
     try:
+        from myopic.config import auto_index
         from myopic.embeddings import embed_texts as _embed_texts_fn
+        from myopic.semantic.indexer import index_repo as _index_repo
         from myopic.semantic.indexer import index_status as _index_status
         from myopic.semantic.store import CodeIndex
+
+        # Auto-index (default on; opt out with MYOPIC_AUTO_INDEX=0): build on the
+        # first review, refresh when stale — so nobody runs index_repo by hand. Only
+        # when the checkout holds the MR (root_ok), so we never index the wrong
+        # branch; Ollama down / model missing just falls through to graph-only.
+        state = _index_status(root).get("state")
+        if root_ok and auto_index() and state in ("absent", "stale", "model_mismatch", "unknown"):
+            try:
+                _index_repo(root)
+            except Exception:
+                pass
 
         idx = CodeIndex.connect(root)
         if idx.has_table():
@@ -213,7 +227,6 @@ def mr_review_context(url: str, root: str, max_symbols: int = 8) -> dict:
     # silently reflect the wrong version (e.g. root left on the target branch).
     # When that's the case, fixing the checkout is the FIRST step; the index hint
     # is suppressed (indexing the wrong branch would be wrong too).
-    root_ok = root_status is None or root_status.get("ok", False)
     if root_status is not None:
         result["root_status"] = root_status
         if not root_status["ok"]:

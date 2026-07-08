@@ -32,6 +32,7 @@ class _FakeReview:
 
 def _run(monkeypatch, tmp_path, head, *, is_git=True, present=True, root_sha=None):
     monkeypatch.setenv("MYOPIC_HOME", str(tmp_path))  # keep any index probe hermetic
+    monkeypatch.setenv("MYOPIC_AUTO_INDEX", "0")      # test prompts, not auto-index
     monkeypatch.setattr(rc, "open_review", lambda url: _FakeReview(head))
     monkeypatch.setattr(rc, "dependency_impact", lambda sym, root: {"symbol": sym})
     monkeypatch.setattr(rc.gitutil, "is_git_repo", lambda r: is_git)
@@ -85,3 +86,52 @@ class TestIndexPrompts:
         out = _run(monkeypatch, tmp_path, "abc", present=False, root_sha="def")
         assert "warning" in out
         assert "next" not in out
+
+
+@pytest.mark.skipif(not _LANCEDB, reason="auto-index needs the semantic extra")
+class TestAutoIndex:
+    def test_auto_indexes_on_first_review(self, monkeypatch, tmp_path):
+        home = tmp_path / "home"
+        repo = tmp_path / "repo"
+        home.mkdir()
+        repo.mkdir()
+        (repo / "pay.py").write_text("def process_payment(x):\n    return x\n", encoding="utf-8")
+
+        monkeypatch.setenv("MYOPIC_HOME", str(home))
+        monkeypatch.delenv("MYOPIC_AUTO_INDEX", raising=False)   # default ON
+
+        fake = lambda texts: [[1.0, 0.0, 0.0, 0.0] for _ in texts]
+        monkeypatch.setattr("myopic.embeddings.embed_texts", fake)
+        monkeypatch.setattr("myopic.semantic.indexer.embed_texts", fake)
+
+        monkeypatch.setattr(rc, "open_review", lambda url: _FakeReview("abc"))
+        monkeypatch.setattr(rc, "dependency_impact", lambda sym, root: {"symbol": sym})
+        monkeypatch.setattr(rc.gitutil, "is_git_repo", lambda r: True)
+        monkeypatch.setattr(rc.gitutil, "head_sha", lambda r: "abc")
+        monkeypatch.setattr(rc.gitutil, "commit_present", lambda r, s: True)
+
+        out = rc.mr_review_context("https://gitlab.com/g/p/-/merge_requests/1", str(repo))
+        # It indexed itself on the first review → semantic is now available,
+        # and there's no "run index_repo" prompt left over.
+        assert out["semantic_available"] is True
+        assert "index_repo" not in out.get("next", "")
+
+    def test_opt_out_leaves_it_absent(self, monkeypatch, tmp_path):
+        home = tmp_path / "home"
+        repo = tmp_path / "repo"
+        home.mkdir()
+        repo.mkdir()
+        (repo / "pay.py").write_text("def process_payment(x):\n    return x\n", encoding="utf-8")
+
+        monkeypatch.setenv("MYOPIC_HOME", str(home))
+        monkeypatch.setenv("MYOPIC_AUTO_INDEX", "0")            # opted out
+
+        monkeypatch.setattr(rc, "open_review", lambda url: _FakeReview("abc"))
+        monkeypatch.setattr(rc, "dependency_impact", lambda sym, root: {"symbol": sym})
+        monkeypatch.setattr(rc.gitutil, "is_git_repo", lambda r: True)
+        monkeypatch.setattr(rc.gitutil, "head_sha", lambda r: "abc")
+        monkeypatch.setattr(rc.gitutil, "commit_present", lambda r, s: True)
+
+        out = rc.mr_review_context("https://gitlab.com/g/p/-/merge_requests/1", str(repo))
+        assert out["semantic_available"] is False
+        assert out.get("index_status", {}).get("state") == "absent"

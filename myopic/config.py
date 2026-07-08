@@ -104,6 +104,17 @@ def auto_pull() -> bool:
     return os.environ.get("MYOPIC_AUTO_PULL", "").strip().lower() in ("1", "true", "yes", "on")
 
 
+def auto_index() -> bool:
+    """Whether mr_review_context auto-builds/refreshes the index (default ON).
+
+    If you installed myopic[semantic] you opted into the semantic layer, so we make
+    it just work — index on first review, refresh when stale — with no manual
+    index_repo. Disable with MYOPIC_AUTO_INDEX=0 (e.g. to avoid a slow first build
+    inside a review call; the graph pass works regardless).
+    """
+    return os.environ.get("MYOPIC_AUTO_INDEX", "").strip().lower() not in ("0", "false", "no", "off")
+
+
 def index_dir() -> Path:
     """Directory where semantic-search LanceDB indexes are stored."""
     return config_dir() / "index"

@@ -82,9 +82,10 @@ server (MYOPIC_OLLAMA_URL, default http://localhost:11434):
    needed), and — if myopic[semantic] is installed and the repo is indexed —
    enriches each with related_patterns from a semantic search. A structure-only
    result (semantic_available: false) is fully valid; semantic context is
-   additive. It surfaces index_status and a "next" hint — on a first review it may
-   say the repo isn't indexed (offer to index_repo to turn on semantic context);
-   if stale, offer a refresh.
+   additive. AUTO-INDEX: with myopic[semantic] installed it indexes the repo on the
+   first review and refreshes when stale — automatically, no manual index_repo
+   (disable with MYOPIC_AUTO_INDEX=0). The graph pass needs no index and always
+   runs. index_status is surfaced for visibility.
    THE CANONICAL FLOW when reviewing against a clone:
      1. If the result has a "warning" (root isn't the MR head — clone on the
         target branch, MR code absent), STOP. Run `myopic worktree <url> <repo>`;

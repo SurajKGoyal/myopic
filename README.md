@@ -194,9 +194,13 @@ not bundle or launch it. The one-time prerequisites:
 `myopic doctor` checks all three and offers to pull the model for you.
 
 Embeddings are stored in an embedded [LanceDB](https://lancedb.com) index with
-hybrid (vector + full-text) search. `index_repo` indexes a checked-out repo and
-`mr_review_context` enriches each changed symbol with semantically similar code.
-Without the extra, `mr_review_context` still returns the structural (graph) signal.
+hybrid (vector + full-text) search, and `mr_review_context` enriches each changed
+symbol with semantically similar code. **You don't run `index_repo` by hand** —
+with the extra installed, `mr_review_context` indexes the repo on the first review
+and refreshes when stale, automatically (disable with `MYOPIC_AUTO_INDEX=0`; the
+graph pass needs no index and always runs). `index_repo` / `myopic index` remain
+for explicit/cron use. Without the extra, `mr_review_context` returns the graph
+signal alone.
 
 **Indexing is incremental and freshness-aware.** The first `index_repo` is a full
 build; after that only files whose content changed are re-embedded, so refreshing
@@ -236,6 +240,7 @@ Override the model/endpoint with `MYOPIC_EMBED_MODEL` / `MYOPIC_OLLAMA_URL`.
 | env var | `MYOPIC_GITLAB_TOKEN` / `GITLAB_TOKEN` | fallback if no TOML |
 | env var | `MYOPIC_CONFIG` / `MYOPIC_HOME` | override the config file / directory |
 | env var | `MYOPIC_EMBED_MODEL` / `MYOPIC_OLLAMA_URL` | semantic layer model + endpoint |
+| env var | `MYOPIC_AUTO_INDEX` | `0` to disable auto-indexing during review (default on) |
 | env var | `MYOPIC_AUTO_PULL` | `1` to auto-pull a missing embedding model on first use (default off) |
 
 ## Security
