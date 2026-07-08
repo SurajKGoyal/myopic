@@ -93,6 +93,27 @@ index never silently degrades a review. **Ideas welcome.**
 
 ## 🔭 Later
 
+### Learn from review history (`mr_history`)
+Mine the last N months of **merged** MRs/PRs — the review threads paired with the
+fixes they produced — to learn a codebase's *recurring* review findings (what this
+team actually keeps flagging), and use them to sharpen future reviews.
+
+- **Two delivery paths.** (A) Distil the history into a **house checklist** fed to
+  the reviewer/agent — high ROI, interpretable, works on the **base install** (no
+  embeddings). (B) A **RAG** layer that retrieves similar past findings for the
+  current diff — the `myopic[semantic]` version, later, only if (A) proves the
+  signal. Start with (A).
+- **Cached + incremental, not re-fetched.** History is append-mostly (merged MRs
+  are frozen), so cache it and top up only with MRs merged since a stored cursor
+  (`merged_at` / IID). Same "index once, delta-update, track freshness" model as
+  the code index — with a `history_status` companion.
+- **Keyed by the remote repo**, not a local checkout — history comes from the API,
+  not the filesystem (a new store, distinct from the code index).
+- **Design seam:** myopic provides the corpus (`mr_history` = cached merged-MR
+  review threads + fix diffs); the agent/subagent does the distillation. Open
+  scoping decisions: cache format (SQLite vs JSONL), and what counts as a
+  "substantive" thread worth keeping. Bigger build than a point release — spec first.
+
 ### GitHub review-thread resolution
 Inline PR comments are surfaced today, but GitHub only exposes thread-resolution
 status via GraphQL — so `resolved` is reported as `false` for GitHub. Wiring the
