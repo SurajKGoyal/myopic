@@ -6,8 +6,14 @@ just consumes (is_git_repo, head_sha, commit_present).
 
 from __future__ import annotations
 
+import importlib.util
+
+import pytest
+
 import myopic.tools.review_context as rc
 from myopic.platforms.base import DiffSet, FileDiff, ReviewMetadata
+
+_LANCEDB = importlib.util.find_spec("lancedb") is not None
 
 
 class _FakeReview:
@@ -60,3 +66,22 @@ def test_non_git_root_skips_guard(monkeypatch, tmp_path):
     out = _run(monkeypatch, tmp_path, "abc123", is_git=False)
     assert "root_status" not in out
     assert "warning" not in out
+
+
+@pytest.mark.skipif(not _LANCEDB, reason="index_state needs the semantic extra")
+class TestIndexPrompts:
+    """The absent-index prompt, and its suppression when root is the wrong branch."""
+
+    def test_absent_index_prompts_to_index(self, monkeypatch, tmp_path):
+        # root holds the MR (ok), but the repo was never indexed → offer to index.
+        out = _run(monkeypatch, tmp_path, "abc", present=True, root_sha="abc")
+        assert out["root_status"]["ok"] is True
+        assert out.get("index_status", {}).get("state") == "absent"
+        assert "next" in out and "index_repo" in out["next"]
+
+    def test_bad_root_suppresses_index_prompt(self, monkeypatch, tmp_path):
+        # root does NOT hold the MR → warning to fix the checkout first; do NOT
+        # also prompt to index (it would index the wrong branch).
+        out = _run(monkeypatch, tmp_path, "abc", present=False, root_sha="def")
+        assert "warning" in out
+        assert "next" not in out

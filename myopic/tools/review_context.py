@@ -211,6 +211,9 @@ def mr_review_context(url: str, root: str, max_symbols: int = 8) -> dict:
 
     # Loud warning if the clone doesn't hold the MR's code — graph results would
     # silently reflect the wrong version (e.g. root left on the target branch).
+    # When that's the case, fixing the checkout is the FIRST step; the index hint
+    # is suppressed (indexing the wrong branch would be wrong too).
+    root_ok = root_status is None or root_status.get("ok", False)
     if root_status is not None:
         result["root_status"] = root_status
         if not root_status["ok"]:
@@ -218,24 +221,32 @@ def mr_review_context(url: str, root: str, max_symbols: int = 8) -> dict:
             if root_status["state"] == "mr_head_absent":
                 result["warning"] = (
                     f"The MR head {mr_head} is NOT in the clone at {root} (it's at "
-                    f"{root_sha}). dependency_impact and related results reflect the "
-                    "checked-out code, which is MISSING this MR's changes — new "
-                    f"symbols won't be found. Check out the MR branch, or run "
-                    f"`myopic worktree {url} {root}`, then retry."
+                    f"{root_sha}) — graph results are MISSING this MR's changes. Set up "
+                    "the MR branch first, then work against that checkout: run "
+                    f"`myopic worktree {url} {root}`, which prints a path P at the MR "
+                    "head; then index_repo(P) (if using semantic) and re-run "
+                    "mr_review_context(url, P) against P."
                 )
             else:  # not_checked_out
                 result["warning"] = (
                     f"The clone at {root} is on {root_sha}, not the MR head {mr_head}. "
-                    "Results reflect the checked-out commit; check out the MR head "
+                    "Check out the MR head (or `myopic worktree`) and review that path "
                     "for exact results."
                 )
 
     if index_state is not None:
         result["index_status"] = index_state
         state = index_state.get("state")
-        if state in ("stale", "model_mismatch", "unknown"):
+        if root_ok and state == "absent":
+            # First review of this repo — offer to index so semantic context turns on.
+            result["next"] = (
+                f"This repo has no semantic index yet — graph context is included, but "
+                f"run index_repo(root={root!r}) to also surface duplication and "
+                "convention matches from the rest of the codebase."
+            )
+        elif root_ok and state in ("stale", "model_mismatch", "unknown"):
             behind = index_state.get("commits_behind")
-            behind_txt = f" ({behind} commits behind)" if behind else ""
+            behind_txt = f" ({behind} commits behind main)" if behind else ""
             result["next"] = (
                 f"Semantic index is {state}{behind_txt}. Its related_patterns may be "
                 f"out of date — consider index_repo(root={root!r}) to refresh "

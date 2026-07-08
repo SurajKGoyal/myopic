@@ -71,7 +71,8 @@ server (MYOPIC_OLLAMA_URL, default http://localhost:11434):
    measured against the repo's MAIN line, not the checkout, so reviewing a feature
    branch stays "fresh"; only main moving past the indexed commit is "stale"
    (reports commits_behind). Check this before leaning on semantic results; if
-   stale, ASK THE USER whether to index_repo(root) first (incremental, seconds).
+   "absent" (never indexed) or "stale", OFFER to index_repo(root) first
+   (incremental after the first build — usually seconds).
 9. code_search(query, root) — hybrid vector + full-text search over an indexed
    repo. Use to find patterns, conventions, or examples before reviewing a new
    implementation. Its result carries index_status so you can see staleness.
@@ -81,12 +82,17 @@ server (MYOPIC_OLLAMA_URL, default http://localhost:11434):
    needed), and — if myopic[semantic] is installed and the repo is indexed —
    enriches each with related_patterns from a semantic search. A structure-only
    result (semantic_available: false) is fully valid; semantic context is
-   additive. It also surfaces index_status — if it reports stale, offer a refresh.
-   ROOT MUST HOLD THE MR: it checks whether the MR head is checked out at `root`
-   and returns root_status + a "warning" if not. If you see that warning (clone is
-   on the target branch, MR code absent), STOP — set up the MR branch first with
-   `myopic worktree <url> <repo>` and re-run against the printed path. Otherwise
-   graph results reflect code that lacks the MR's changes.
+   additive. It surfaces index_status and a "next" hint — on a first review it may
+   say the repo isn't indexed (offer to index_repo to turn on semantic context);
+   if stale, offer a refresh.
+   THE CANONICAL FLOW when reviewing against a clone:
+     1. If the result has a "warning" (root isn't the MR head — clone on the
+        target branch, MR code absent), STOP. Run `myopic worktree <url> <repo>`;
+        it prints a path P checked out at the MR head.
+     2. Then work against P: index_repo(P) if using semantic, and re-run
+        mr_review_context(url, P). Everything (graph + index + review) uses P.
+   Never index or review the target-branch checkout — its results lack the MR's
+   changes, and indexing it would index the wrong branch.
 
 Closing the loop — verify and (on explicit request) comment:
 11. mr_verify_review(url) — read-only. For each existing review thread, shows the
