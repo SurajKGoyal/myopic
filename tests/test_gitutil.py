@@ -91,6 +91,20 @@ class TestGitRepo:
         assert gitutil.add_worktree(str(repo), str(tmp_path / "wt2"), "0" * 40) is False
 
 
+    def test_common_dir_shared_by_clone_and_worktree(self, repo, tmp_path):
+        (repo / "f.txt").write_text("x", encoding="utf-8")
+        _git(repo, "add", "f.txt")
+        _git(repo, "commit", "-q", "-m", "c")
+        sha = gitutil.head_sha(str(repo))
+        wt = tmp_path / "wt"
+        gitutil.add_worktree(str(repo), str(wt), sha)
+
+        cd_main = gitutil.common_dir(str(repo))
+        cd_wt = gitutil.common_dir(str(wt))
+        assert cd_main and cd_wt
+        assert cd_main == cd_wt   # clone and worktree → one repo identity
+
+
 class TestNonGitPrimitives:
     def test_commit_present_non_git(self, tmp_path):
         assert gitutil.commit_present(str(tmp_path), "0" * 40) is False
@@ -98,3 +112,40 @@ class TestNonGitPrimitives:
     def test_fetch_ref_non_git(self, tmp_path):
         # No remote / not a repo → False, never raises.
         assert gitutil.fetch_ref(str(tmp_path), "main") is False
+
+    def test_common_dir_non_git(self, tmp_path):
+        assert gitutil.common_dir(str(tmp_path)) is None
+
+
+class TestIndexKey:
+    """The semantic index must key by repository, not checkout path."""
+
+    def test_clone_and_worktree_share_one_index(self, repo, tmp_path):
+        from myopic.semantic import store
+
+        (repo / "f.txt").write_text("x", encoding="utf-8")
+        _git(repo, "add", "f.txt")
+        _git(repo, "commit", "-q", "-m", "c")
+        sha = gitutil.head_sha(str(repo))
+        wt = tmp_path / "wt"
+        gitutil.add_worktree(str(repo), str(wt), sha)
+
+        assert store._table_name(str(repo)) == store._table_name(str(wt))
+
+    def test_different_repos_differ(self, tmp_path):
+        from myopic.semantic import store
+
+        a = tmp_path / "a"
+        b = tmp_path / "b"
+        for d in (a, b):
+            d.mkdir()
+            _init_repo(d)
+        assert store._table_name(str(a)) != store._table_name(str(b))
+
+    def test_non_git_falls_back_to_path(self, tmp_path):
+        from myopic.semantic import store
+
+        a = tmp_path / "plain"
+        a.mkdir()
+        # deterministic + path-based when not a git repo
+        assert store._table_name(str(a)) == store._table_name(str(a))

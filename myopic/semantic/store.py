@@ -10,7 +10,23 @@ import hashlib
 import json
 from pathlib import Path
 
+from myopic import gitutil
 from myopic.config import index_dir
+
+
+def _repo_key(root: str) -> str:
+    """Identity used to key a repo's index.
+
+    The git repository's shared common dir — so the main clone and all of its
+    worktrees resolve to the SAME index (index once, reuse across every branch/MR;
+    switching to a source branch only re-embeds the changed files). Falls back to
+    the resolved path when `root` isn't a git repo.
+    """
+    return gitutil.common_dir(root) or str(Path(root).resolve())
+
+
+def _table_name(root: str) -> str:
+    return hashlib.sha256(_repo_key(root).encode("utf-8")).hexdigest()[:16]
 
 
 def _create_fts_index(table) -> None:
@@ -49,8 +65,9 @@ class CodeIndex:
         root_path = Path(root).resolve()
         idx_dir = index_dir()
         idx_dir.mkdir(parents=True, exist_ok=True)
-        # Stable per-repo table name: first 16 hex chars of SHA-256 of the resolved path.
-        table_name = hashlib.sha256(str(root_path).encode("utf-8")).hexdigest()[:16]
+        # Keyed by the git repository (shared by all worktrees), not the checkout
+        # path — so a worktree reuses its clone's index instead of rebuilding one.
+        table_name = _table_name(str(root_path))
         db = lancedb.connect(str(idx_dir))
         return cls(root_path, db, table_name)
 

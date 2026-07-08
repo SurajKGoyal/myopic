@@ -77,6 +77,26 @@ def add_worktree(root: str, path: str, ref: str) -> bool:
     return _run(root, ["worktree", "add", "--detach", str(path), ref]) is not None
 
 
+def common_dir(root: str) -> str | None:
+    """Absolute path to the repository's shared git dir (`--git-common-dir`).
+
+    A clone and all of its linked worktrees resolve to the SAME value, which makes
+    it a stable per-repository key: the semantic index built from the main clone
+    and one built from a worktree land in the same table. Returns None if `root`
+    isn't a git repo (callers fall back to the path).
+    """
+    out = _run(root, ["rev-parse", "--git-common-dir"])
+    if not out:
+        return None
+    p = Path(out)
+    if not p.is_absolute():
+        p = Path(root) / p
+    try:
+        return str(p.resolve())
+    except OSError:
+        return None
+
+
 def short(sha: str | None, length: int = 8) -> str | None:
     """Short form of a SHA for display, or None passthrough."""
     return sha[:length] if sha else None

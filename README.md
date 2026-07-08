@@ -206,6 +206,10 @@ to the git commit it was indexed from, not wall-clock time. `code_search` and
 `mr_review_context` carry that status so a stale index never silently degrades a
 review; the AI is told to offer a refresh when it's stale.
 
+The index is **per repository, not per checkout** — a `myopic worktree` at an MR's
+head shares its clone's index, so reviewing a new branch never rebuilds it; only
+the files that branch changed get re-embedded.
+
 myopic is a stdio server (no background process), so there's no built-in
 scheduler — but `myopic index /path/to/repo` is the hook for one. Point cron or
 launchd at it to keep an index fresh out of band:
