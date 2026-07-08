@@ -114,6 +114,25 @@ team actually keeps flagging), and use them to sharpen future reviews.
   scoping decisions: cache format (SQLite vs JSONL), and what counts as a
   "substantive" thread worth keeping. Bigger build than a point release — spec first.
 
+### Review-memory RAG (a store that gets better with use)
+Where `mr_history` mines the past in a batch, this is the **persistent, accumulating**
+layer: embed the *outputs and decisions* of reviews as they happen and retrieve
+them into future ones — so myopic sharpens the more it's used (amnesic's "learn
+once, reuse forever", applied to code review). Needs `myopic[semantic]`; it can use
+the `mr_history` cache as its seed corpus.
+
+Worth embedding, retrieved into `mr_review_context`:
+- **Past review findings/comments** → "we've flagged this pattern before."
+- **Decided conventions** (from resolved threads) → "the team settled X here."
+- **Confirmed vs. false-positive findings** → suppress the false positives already
+  retracted (the feedback loop that makes it *learn*, not just remember).
+
+Caveats to design against: it must **augment, not replace** the fresh review (else
+it reinforces the team's blind spots), and it inherits the same freshness problem
+as the code index (a convention can be overturned). Value scales with repeated
+reviews on one repo. Pick a concrete goal before building (consistency? less
+repeated noise? onboarding a new contributor's AI?) — the goal shapes the design.
+
 ### GitHub review-thread resolution
 Inline PR comments are surfaced today, but GitHub only exposes thread-resolution
 status via GraphQL — so `resolved` is reported as `false` for GitHub. Wiring the
