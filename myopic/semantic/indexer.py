@@ -6,8 +6,8 @@ The first index of a repo is a full build. After that, index_repo re-embeds only
 the files whose content changed since the last run (tracked by per-file content
 hash in a JSON sidecar), so refreshing a large repo takes seconds, not minutes.
 A change of embedding model, a missing sidecar, or force=True triggers a full
-rebuild. The sidecar also records the git HEAD the index was built from, which
-`index_status` uses to report "N commits behind".
+rebuild. The sidecar also records the repo's main-line sha the index approximates
+(not the current checkout), which `index_status` uses to report "N commits behind".
 
 Delegates lazy-import safety to embeddings.embed_texts and semantic.store.CodeIndex,
 so this module has no top-level optional imports and can be imported by the base
@@ -115,7 +115,11 @@ def index_repo(root: str, force: bool = False) -> dict:
     root_path = Path(root).resolve()
     idx = CodeIndex.connect(str(root_path))
     model = embed_model()
-    git_sha = gitutil.head_sha(str(root_path))
+    # Stamp the index with the repo's MAIN-line sha (the corpus it approximates),
+    # not the current checkout — so indexing while on a feature branch / MR head
+    # isn't read as perpetually "stale vs main". Falls back to HEAD for repos with
+    # no resolvable default branch. (Freshness is judged against main in index_status.)
+    git_sha = gitutil.default_branch_sha(str(root_path)) or gitutil.head_sha(str(root_path))
 
     chunks_by_file, hash_by_file, skipped = _scan(root_path)
     meta = idx.read_meta()

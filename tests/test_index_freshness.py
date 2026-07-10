@@ -123,3 +123,18 @@ class TestIncrementalIndex:
         monkeypatch.setattr(ix.gitutil, "commits_behind", lambda root, old, ref="HEAD": 2)
         st2 = ix.index_status(str(repo))
         assert st2["state"] == "stale" and st2["commits_behind"] == 2
+
+    def test_indexing_off_main_stamps_main_not_checkout(self, monkeypatch, tmp_path):
+        """Indexing while checked out on a feature branch / MR head stamps the MAIN
+        sha, so a freshly-built index isn't read as perpetually 'stale vs main'."""
+        ix, repo = self._prep(monkeypatch, tmp_path)
+        monkeypatch.setattr(ix.gitutil, "head_sha", lambda root: "FEAT")     # on a feature branch
+        monkeypatch.setattr(ix.gitutil, "default_branch_ref", lambda root: "main")
+        monkeypatch.setattr(ix.gitutil, "sha_of", lambda root, ref: "M1")    # main is M1
+        monkeypatch.setattr(ix.gitutil, "is_dirty", lambda root: False)
+
+        r = ix.index_repo(str(repo))
+        assert r["git_sha"] == "M1"          # stamped MAIN, not the FEAT checkout
+
+        st = ix.index_status(str(repo))
+        assert st["state"] == "fresh"        # not stale, despite the off-main checkout

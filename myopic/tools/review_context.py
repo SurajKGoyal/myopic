@@ -119,9 +119,11 @@ def mr_review_context(url: str, root: str, max_symbols: int = 8) -> dict:
     2. If myopic[semantic] is installed AND the repo is indexed, enriches each
        symbol with related_patterns from a hybrid semantic search.
 
-    Semantic enrichment is additive: without the extra (or an index) the result
-    is still complete. When an index exists, index_status reports its freshness
-    so the caller can decide whether to refresh via index_repo first.
+    The semantic index is the repo's *codebase corpus* (its main line): each changed
+    symbol is queried against it to find similar existing code, so it does NOT need
+    the MR's own new files — any recent checkout indexes fine and the index is reused
+    across MRs. Enrichment is additive: without the extra (or an index) the result is
+    still complete; myopic auto-indexes on first use (MYOPIC_AUTO_INDEX=0 to opt out).
 
     Args:
         url:         Full merge/pull request URL.
@@ -162,11 +164,15 @@ def mr_review_context(url: str, root: str, max_symbols: int = 8) -> dict:
         from myopic.semantic.store import CodeIndex
 
         # Auto-index (default on; opt out with MYOPIC_AUTO_INDEX=0): build on the
-        # first review, refresh when stale — so nobody runs index_repo by hand. Only
-        # when the checkout holds the MR (root_ok), so we never index the wrong
-        # branch; Ollama down / model missing just falls through to graph-only.
+        # first review, refresh when stale — so nobody runs index_repo by hand.
+        # NOT gated on the checkout being the MR head: the semantic index is the
+        # codebase *corpus* (the repo's main line), and related_patterns queries
+        # each changed symbol AGAINST it — so it doesn't need the MR's new files,
+        # and any recent checkout is a fine corpus. root_ok gates only the graph
+        # claims below, never corpus-building. Ollama down / model missing just
+        # falls through to graph-only.
         state = _index_status(root).get("state")
-        if root_ok and auto_index() and state in ("absent", "stale", "model_mismatch", "unknown"):
+        if auto_index() and state in ("absent", "stale", "model_mismatch", "unknown"):
             try:
                 _index_repo(root)
             except Exception:
@@ -237,8 +243,8 @@ def mr_review_context(url: str, root: str, max_symbols: int = 8) -> dict:
                     f"{root_sha}) — graph results are MISSING this MR's changes. Set up "
                     "the MR branch first, then work against that checkout: run "
                     f"`myopic worktree {url} {root}`, which prints a path P at the MR "
-                    "head; then index_repo(P) (if using semantic) and re-run "
-                    "mr_review_context(url, P) against P."
+                    "head; then re-run mr_review_context(url, P) against P (it "
+                    "auto-indexes the corpus)."
                 )
             else:  # not_checked_out
                 result["warning"] = (
@@ -250,14 +256,18 @@ def mr_review_context(url: str, root: str, max_symbols: int = 8) -> dict:
     if index_state is not None:
         result["index_status"] = index_state
         state = index_state.get("state")
-        if root_ok and state == "absent":
+        if state == "absent":
             # First review of this repo — offer to index so semantic context turns on.
+            # Not gated on the checkout: the index is the codebase corpus, so it's
+            # worth building regardless of which branch is checked out.
             result["next"] = (
                 f"This repo has no semantic index yet — graph context is included, but "
                 f"run index_repo(root={root!r}) to also surface duplication and "
-                "convention matches from the rest of the codebase."
+                "convention matches from the rest of the codebase. (The index is the "
+                "codebase corpus, not the MR head — the diff is the query, so the MR's "
+                "new files don't need to be in it.)"
             )
-        elif root_ok and state in ("stale", "model_mismatch", "unknown"):
+        elif state in ("stale", "model_mismatch", "unknown"):
             behind = index_state.get("commits_behind")
             behind_txt = f" ({behind} commits behind main)" if behind else ""
             result["next"] = (

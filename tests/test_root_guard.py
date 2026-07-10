@@ -80,12 +80,14 @@ class TestIndexPrompts:
         assert out.get("index_status", {}).get("state") == "absent"
         assert "next" in out and "index_repo" in out["next"]
 
-    def test_bad_root_suppresses_index_prompt(self, monkeypatch, tmp_path):
-        # root does NOT hold the MR → warning to fix the checkout first; do NOT
-        # also prompt to index (it would index the wrong branch).
+    def test_bad_root_still_offers_index(self, monkeypatch, tmp_path):
+        # root does NOT hold the MR → warning to fix the checkout (graph correctness).
+        # But the semantic index is the codebase CORPUS, not the MR head — the two
+        # concerns are independent, so we still offer to index. (_run sets
+        # MYOPIC_AUTO_INDEX=0, so nothing is built here; the prompt is what we test.)
         out = _run(monkeypatch, tmp_path, "abc", present=False, root_sha="def")
         assert "warning" in out
-        assert "next" not in out
+        assert "next" in out and "index_repo" in out["next"]
 
 
 @pytest.mark.skipif(not _LANCEDB, reason="auto-index needs the semantic extra")
@@ -115,6 +117,35 @@ class TestAutoIndex:
         # and there's no "run index_repo" prompt left over.
         assert out["semantic_available"] is True
         assert "index_repo" not in out.get("next", "")
+
+    def test_auto_indexes_even_when_not_on_mr_head(self, monkeypatch, tmp_path):
+        # The semantic corpus is the codebase, not the MR head — so auto-index must
+        # run even when the checkout is on the wrong branch. This is the bug this
+        # fixes: root_ok used to gate auto-index, silently leaving semantic off when
+        # the reviewer's clone wasn't exactly at the MR head.
+        home = tmp_path / "home"
+        repo = tmp_path / "repo"
+        home.mkdir()
+        repo.mkdir()
+        (repo / "pay.py").write_text("def process_payment(x):\n    return x\n", encoding="utf-8")
+
+        monkeypatch.setenv("MYOPIC_HOME", str(home))
+        monkeypatch.delenv("MYOPIC_AUTO_INDEX", raising=False)   # default ON
+
+        fake = lambda texts: [[1.0, 0.0, 0.0, 0.0] for _ in texts]
+        monkeypatch.setattr("myopic.embeddings.embed_texts", fake)
+        monkeypatch.setattr("myopic.semantic.indexer.embed_texts", fake)
+
+        monkeypatch.setattr(rc, "open_review", lambda url: _FakeReview("mrhead999"))
+        monkeypatch.setattr(rc, "dependency_impact", lambda sym, root: {"symbol": sym})
+        monkeypatch.setattr(rc.gitutil, "is_git_repo", lambda r: True)
+        monkeypatch.setattr(rc.gitutil, "head_sha", lambda r: "checkout111")  # NOT the MR head
+        monkeypatch.setattr(rc.gitutil, "commit_present", lambda r, s: False)  # MR head absent
+
+        out = rc.mr_review_context("https://gitlab.com/g/p/-/merge_requests/1", str(repo))
+        assert out["root_status"]["ok"] is False   # wrong checkout is still flagged
+        assert "warning" in out                     # graph warning still shown
+        assert out["semantic_available"] is True    # BUT semantic got built anyway
 
     def test_opt_out_leaves_it_absent(self, monkeypatch, tmp_path):
         home = tmp_path / "home"
