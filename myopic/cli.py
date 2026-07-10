@@ -166,8 +166,8 @@ def index(root: str, force: bool) -> None:
 
     myopic is a stdio server with no background process, so there is no built-in
     scheduler. This command is the hook for one: point cron/launchd at
-    `myopic index /path/to/repo` to keep the index fresh out of band. Needs the
-    myopic[semantic] extra + a running Ollama.
+    `myopic index /path/to/repo` to keep the index fresh out of band. Requires a
+    running Ollama (the semantic layer is built in; run `myopic doctor` to set it up).
     """
     from myopic.tools.index_repo import index_repo as _index_repo
 
@@ -247,17 +247,17 @@ def doctor(do_pull: bool | None) -> None:
         hard_fail = True
         console.print("  [red]✗[/red] No platform configured — run [cyan]myopic init[/cyan].")
 
-    # 2. Optional semantic layer: extra → Ollama → model.
+    # 2. Semantic layer (bundled in base install): dependencies → Ollama → model.
     console.print("\n[bold]Semantic layer (optional — graph review works without it)[/bold]")
     try:
         import httpx  # noqa: F401
         import lancedb  # noqa: F401
     except ImportError:
-        console.print('  [yellow]○[/yellow] extra not installed — '
-                      '[cyan]pip install "myopic[semantic]"[/cyan] to enable semantic search.')
+        console.print('  [yellow]○[/yellow] the semantic layer is bundled — '
+                      'reinstall myopic if this import fails.')
         _doctor_exit(hard_fail)
         return
-    console.print("  [green]✓[/green] extra installed (lancedb + httpx)")
+    console.print("  [green]✓[/green] semantic layer available (lancedb + httpx)")
 
     url, model = ollama_url(), embed_model()
     try:

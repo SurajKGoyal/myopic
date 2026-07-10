@@ -43,7 +43,7 @@ failing. Noise (lockfiles, generated, binary) is listed but not expanded.
   worktree so the graph tools review the MR's actual code, leaving your main
   checkout untouched.
 
-**Optional semantic layer** (`myopic[semantic]` — lean: lancedb + httpx, no torch):
+**Semantic layer** (built in — lean: lancedb + httpx, no torch; needs a local Ollama):
 `index_repo`, `code_search`, and the semantic half of `mr_review_context`. Local
 Ollama embeddings (code-specialized model) + embedded LanceDB hybrid search.
 Indexing is **incremental** — after the first build, only files whose content
@@ -74,7 +74,7 @@ backend (`GitHubPlatform` + `GitHubReview`), not a rewrite of the tools.
   backoff so partial progress survives and rate limits are respected. Writes are
   explicit and clearly separated from the read-only tools.
 
-**Setup:** `pipx install "myopic[semantic]"`; token via `myopic init` or inline in
+**Setup:** `pipx install myopic`; token via `myopic init` or inline in
 the client config's `env` block; `myopic doctor` health-checks the platform +
 semantic layer and offers to pull the model; `MYOPIC_AUTO_PULL=1` pulls a missing
 embedding model on first use.
@@ -101,7 +101,7 @@ team actually keeps flagging), and use them to sharpen future reviews.
 - **Two delivery paths.** (A) Distil the history into a **house checklist** fed to
   the reviewer/agent — high ROI, interpretable, works on the **base install** (no
   embeddings). (B) A **RAG** layer that retrieves similar past findings for the
-  current diff — the `myopic[semantic]` version, later, only if (A) proves the
+  current diff — the semantic version, later, only if (A) proves the
   signal. Start with (A).
 - **Cached + incremental, not re-fetched.** History is append-mostly (merged MRs
   are frozen), so cache it and top up only with MRs merged since a stored cursor
@@ -118,7 +118,7 @@ team actually keeps flagging), and use them to sharpen future reviews.
 Where `mr_history` mines the past in a batch, this is the **persistent, accumulating**
 layer: embed the *outputs and decisions* of reviews as they happen and retrieve
 them into future ones — so myopic sharpens the more it's used (amnesic's "learn
-once, reuse forever", applied to code review). Needs `myopic[semantic]`; it can use
+once, reuse forever", applied to code review). Needs a local Ollama; it can use
 the `mr_history` cache as its seed corpus.
 
 Worth embedding, retrieved into `mr_review_context`:

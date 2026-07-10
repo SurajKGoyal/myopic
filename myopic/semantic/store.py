@@ -59,7 +59,7 @@ class CodeIndex:
             import lancedb
         except ImportError as exc:
             raise RuntimeError(
-                "semantic search needs the optional extra — install with: pip install myopic[semantic]"
+                "the semantic layer is bundled — reinstall myopic if this import fails"
             ) from exc
 
         root_path = Path(root).resolve()

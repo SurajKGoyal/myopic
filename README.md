@@ -69,7 +69,7 @@ binaries are listed but not expanded. Fetch the rest with `files_filter`.
 | `trace_call_chain` | the caller/callee graph of a symbol |
 | `mr_review_context` | **the headline** — for each changed symbol: its impact (always), plus semantically similar code when the optional layer is enabled |
 
-**Optional semantic layer** (`myopic[semantic]`) — `index_repo`, `code_search`,
+**Semantic layer** (built in — needs Ollama) — `index_repo`, `code_search`,
 and the semantic half of `mr_review_context`. See below.
 
 **Close the loop — verify, and (on request) comment:**
@@ -88,11 +88,11 @@ See [ROADMAP.md](./ROADMAP.md) for what's next.
 [pipx](https://pipx.pypa.io) installs myopic isolated and on your PATH:
 
 ```bash
-pipx install "myopic[semantic]"     # omit [semantic] for the core-only install
+pipx install myopic
 ```
 
 Prefer a plain venv? `python3 -m venv ~/.venvs/myopic && ~/.venvs/myopic/bin/pip
-install "myopic[semantic]"`, then use that binary where the examples say `myopic`.
+install myopic`, then use that binary where the examples say `myopic`.
 
 ## Setup
 
@@ -177,30 +177,27 @@ throwaway worktree (your main checkout untouched) and prints the path to use as
 
 ---
 
-## Optional: semantic search (`myopic[semantic]`)
+## Semantic search (built in — needs Ollama)
 
 For "is this consistent with the rest of the codebase?" — duplication, convention
-drift, similar patterns — enable the semantic layer. It's **opt-in** so the base
-install stays lean (no torch, no heavyweight vector DB).
+drift, similar patterns — the semantic layer covers it. It's bundled in the base
+install (lancedb + httpx); the only external requirement is a running Ollama.
 
 Embeddings come from a [local Ollama](https://ollama.com) server **you** run —
 your code never leaves your machine. myopic talks to Ollama over HTTP; it does
 not bundle or launch it. The one-time prerequisites:
 
-1. `pip install "myopic[semantic]"` — adds `lancedb` + `httpx`.
-2. Ollama running (default `localhost:11434`, or set `MYOPIC_OLLAMA_URL`).
-3. The embedding model pulled: `ollama pull unclemusclez/jina-embeddings-v2-base-code`.
+1. Ollama running (default `localhost:11434`, or set `MYOPIC_OLLAMA_URL`).
+2. The embedding model pulled: `ollama pull unclemusclez/jina-embeddings-v2-base-code`.
 
-`myopic doctor` checks all three and offers to pull the model for you.
+`myopic doctor` checks both and offers to pull the model for you.
 
 Embeddings are stored in an embedded [LanceDB](https://lancedb.com) index with
 hybrid (vector + full-text) search, and `mr_review_context` enriches each changed
 symbol with semantically similar code. **You don't run `index_repo` by hand** —
-with the extra installed, `mr_review_context` indexes the repo on the first review
-and refreshes when stale, automatically (disable with `MYOPIC_AUTO_INDEX=0`; the
-graph pass needs no index and always runs). `index_repo` / `myopic index` remain
-for explicit/cron use. Without the extra, `mr_review_context` returns the graph
-signal alone.
+it indexes the repo on the first review and refreshes when stale, automatically
+(disable with `MYOPIC_AUTO_INDEX=0`; the graph pass needs no index and always
+runs). `index_repo` / `myopic index` remain for explicit/cron use.
 
 **Indexing is incremental and freshness-aware.** The first `index_repo` is a full
 build; after that only files whose content changed are re-embedded, so refreshing
@@ -251,13 +248,13 @@ Override the model/endpoint with `MYOPIC_EMBED_MODEL` / `MYOPIC_OLLAMA_URL`.
 - **Your token stays local.** It lives in your `.env` / environment and is sent
   only to your configured GitLab instance — never to any third party.
 - Auth errors are scrubbed so your token never leaks into error messages.
-- The optional semantic layer runs entirely locally (your Ollama, an on-disk
+- The semantic layer runs entirely locally (your Ollama, an on-disk
   index) — your code is never sent to a third party.
 
 ## Development
 
 ```bash
-pip install -e ".[dev]"          # + ".[semantic]" to work on the semantic layer
+pip install -e ".[dev]"
 pytest                           # hermetic — no network, Ollama, or lancedb needed
 ```
 

@@ -1,8 +1,8 @@
 """
 embeddings — text-to-vector via a local Ollama server.
 
-Lazily imports httpx so the base myopic install never requires it; only
-myopic[semantic] pulls it in.
+Lazily imports httpx so it is only pulled in when the semantic layer is used;
+it is bundled in the base install.
 """
 
 from __future__ import annotations
@@ -24,7 +24,7 @@ def embed_texts(texts: list[str]) -> list[list[float]]:
         import httpx
     except ImportError as exc:
         raise RuntimeError(
-            "semantic search needs the optional extra — install with: pip install myopic[semantic]"
+            "the semantic layer is bundled — reinstall myopic if this import fails"
         ) from exc
 
     url = ollama_url()

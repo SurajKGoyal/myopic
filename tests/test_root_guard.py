@@ -147,6 +147,36 @@ class TestAutoIndex:
         assert "warning" in out                     # graph warning still shown
         assert out["semantic_available"] is True    # BUT semantic got built anyway
 
+    def test_ollama_down_is_surfaced_loudly(self, monkeypatch, tmp_path):
+        # Semantic deps are built in now, so a failure means the layer couldn't RUN
+        # (Ollama unreachable). It must be surfaced, not silently dropped to graph-only.
+        home = tmp_path / "home"
+        repo = tmp_path / "repo"
+        home.mkdir()
+        repo.mkdir()
+        (repo / "pay.py").write_text("def process_payment(x):\n    return x\n", encoding="utf-8")
+
+        monkeypatch.setenv("MYOPIC_HOME", str(home))
+        monkeypatch.delenv("MYOPIC_AUTO_INDEX", raising=False)   # default ON
+
+        def boom(texts):
+            raise RuntimeError(
+                "Could not reach Ollama at http://localhost:11434. Run `myopic doctor`."
+            )
+        monkeypatch.setattr("myopic.embeddings.embed_texts", boom)
+        monkeypatch.setattr("myopic.semantic.indexer.embed_texts", boom)
+
+        monkeypatch.setattr(rc, "open_review", lambda url: _FakeReview("abc"))
+        monkeypatch.setattr(rc, "dependency_impact", lambda sym, root: {"symbol": sym})
+        monkeypatch.setattr(rc.gitutil, "is_git_repo", lambda r: True)
+        monkeypatch.setattr(rc.gitutil, "head_sha", lambda r: "abc")
+        monkeypatch.setattr(rc.gitutil, "commit_present", lambda r, s: True)
+
+        out = rc.mr_review_context("https://gitlab.com/g/p/-/merge_requests/1", str(repo))
+        assert out["semantic_available"] is False       # nothing got indexed
+        assert "semantic_unavailable" in out            # but the failure is LOUD
+        assert "doctor" in out["next"].lower()          # and points at the fix
+
     def test_opt_out_leaves_it_absent(self, monkeypatch, tmp_path):
         home = tmp_path / "home"
         repo = tmp_path / "repo"

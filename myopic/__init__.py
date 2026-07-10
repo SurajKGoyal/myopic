@@ -6,4 +6,4 @@ codebase — callers, conventions, duplication, dead code — not just the diff 
 front of it.
 """
 
-__version__ = "0.1.7"
+__version__ = "0.1.8"

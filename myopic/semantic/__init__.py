@@ -1,1 +1,1 @@
-"""myopic optional semantic-search layer (requires myopic[semantic])."""
+"""myopic semantic-search layer (bundled in the base install)."""

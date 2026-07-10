@@ -6,7 +6,7 @@ local semantic search index for a repository.
 from __future__ import annotations
 
 _EXTRA_MISSING = (
-    "semantic search needs the optional extra — install with: pip install myopic[semantic]"
+    "the semantic layer is bundled — reinstall myopic if this import fails"
 )
 
 
@@ -19,9 +19,9 @@ def index_repo(root: str, force: bool = False) -> dict:
     content changed since the last run are re-embedded (seconds, not minutes). A
     changed embedding model or force=True triggers a full rebuild.
 
-    Requires the myopic[semantic] extra (lancedb + httpx) and a running Ollama
-    instance. Override the model with MYOPIC_EMBED_MODEL and the server URL with
-    MYOPIC_OLLAMA_URL.
+    Requires a running Ollama (the semantic layer is built in; run `myopic doctor`
+    to set it up). Override the model with MYOPIC_EMBED_MODEL and the server URL
+    with MYOPIC_OLLAMA_URL.
 
     Args:
         root:  Absolute path to the repository to index.

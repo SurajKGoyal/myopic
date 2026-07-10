@@ -1,7 +1,7 @@
 """
 mr_review_context — graph-first review context: dependency impact per changed
-symbol, optionally enriched with semantic search when myopic[semantic] is
-installed and the repo has been indexed.
+symbol, optionally enriched with semantic search when the repo has been indexed
+(the semantic layer is built in; it needs a local Ollama — see `myopic doctor`).
 
 Changed symbols come from the SAME AST/section resolution as mr_diff_sections —
 the actual functions/classes the diff touched — not a raw identifier-frequency
@@ -116,8 +116,8 @@ def mr_review_context(url: str, root: str, max_symbols: int = 8) -> dict:
     For each of the top changed *declarations* in the diff (real functions/
     classes, ranked by how much they changed):
     1. Runs dependency_impact(symbol, root) unconditionally — the blast radius.
-    2. If myopic[semantic] is installed AND the repo is indexed, enriches each
-       symbol with related_patterns from a hybrid semantic search.
+    2. If the repo is indexed (semantic layer is built in; needs a local Ollama),
+       enriches each symbol with related_patterns from a hybrid semantic search.
 
     The semantic index is the repo's *codebase corpus* (its main line): each changed
     symbol is queried against it to find similar existing code, so it does NOT need
@@ -152,6 +152,7 @@ def mr_review_context(url: str, root: str, max_symbols: int = 8) -> dict:
 
     # --- Step 2: semantic availability + (auto) index + freshness ------------
     semantic_available = False
+    semantic_error: str | None = None
     index_state: dict | None = None
     _semantic_index = None
     _embed_texts = None
@@ -169,14 +170,14 @@ def mr_review_context(url: str, root: str, max_symbols: int = 8) -> dict:
         # codebase *corpus* (the repo's main line), and related_patterns queries
         # each changed symbol AGAINST it — so it doesn't need the MR's new files,
         # and any recent checkout is a fine corpus. root_ok gates only the graph
-        # claims below, never corpus-building. Ollama down / model missing just
-        # falls through to graph-only.
+        # claims below, never corpus-building. Ollama down / model missing is
+        # surfaced loudly below (semantic_error), not silently dropped.
         state = _index_status(root).get("state")
         if auto_index() and state in ("absent", "stale", "model_mismatch", "unknown"):
             try:
                 _index_repo(root)
-            except Exception:
-                pass
+            except Exception as exc:
+                semantic_error = str(exc)
 
         idx = CodeIndex.connect(root)
         if idx.has_table():
@@ -217,8 +218,9 @@ def mr_review_context(url: str, root: str, max_symbols: int = 8) -> dict:
                         r["score"] = row["_relevance_score"]
                     related.append(r)
                 entry["related_patterns"] = related
-            except RuntimeError:
-                pass
+            except RuntimeError as exc:
+                if semantic_error is None:
+                    semantic_error = str(exc)
 
         symbols_out.append(entry)
 
@@ -253,10 +255,20 @@ def mr_review_context(url: str, root: str, max_symbols: int = 8) -> dict:
                     "for exact results."
                 )
 
+    # The semantic layer is built in, so a failure here means it couldn't RUN —
+    # almost always Ollama not reachable / the embedding model not pulled. Surface
+    # it loudly (this is myopic's core value) instead of quietly returning graph-only.
+    if semantic_error:
+        result["semantic_unavailable"] = semantic_error
+
     if index_state is not None:
         result["index_status"] = index_state
         state = index_state.get("state")
-        if state == "absent":
+        if semantic_error:
+            result["next"] = (
+                f"Semantic layer is installed but not operational — {semantic_error}"
+            )
+        elif state == "absent":
             # First review of this repo — offer to index so semantic context turns on.
             # Not gated on the checkout: the index is the codebase corpus, so it's
             # worth building regardless of which branch is checked out.

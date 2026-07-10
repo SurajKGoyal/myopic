@@ -1,9 +1,9 @@
 """
-Hermetic tests for the myopic[semantic] feature.
+Hermetic tests for the semantic layer.
 
 No real Ollama server or LanceDB instance is needed — all external I/O is
 monkeypatched. Three test classes cover:
-  a) Graceful degradation when the optional extra is absent.
+  a) Graceful degradation when the semantic layer can't run (deps/Ollama).
   b) Indexer chunk-collection and filtering logic.
   c) mr_review_context graph-first fusion with semantic unavailable.
 """
@@ -51,17 +51,17 @@ def _make_patch(symbol: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# a) Graceful degradation — missing myopic[semantic] extra
+# a) Graceful degradation — semantic layer unavailable (deps missing / Ollama down)
 # ---------------------------------------------------------------------------
 
 
 class TestGracefulDegradation:
-    """When CodeIndex.connect raises RuntimeError (missing extra), tools return {"error": ...}."""
+    """When CodeIndex.connect raises RuntimeError (layer unavailable), tools return {"error": ...}."""
 
     @staticmethod
     def _raise_no_extra(root: str):
         raise RuntimeError(
-            "semantic search needs the optional extra — install with: pip install myopic[semantic]"
+            "the semantic layer is unavailable — reinstall myopic or start Ollama"
         )
 
     def _patch_all_connect(self, monkeypatch) -> None:
@@ -95,7 +95,7 @@ class TestGracefulDegradation:
         result = index_repo_mod.index_repo(str(tmp_path))
 
         assert "error" in result
-        assert "myopic[semantic]" in result["error"]
+        assert "semantic" in result["error"].lower()
 
     def test_code_search_returns_error_dict(self, monkeypatch):
         self._patch_all_connect(monkeypatch)
@@ -103,7 +103,7 @@ class TestGracefulDegradation:
         result = code_search_mod.code_search("find something", root="/fake/root")
 
         assert "error" in result
-        assert "myopic[semantic]" in result["error"]
+        assert "semantic" in result["error"].lower()
 
     def test_mr_review_context_semantic_unavailable(self, monkeypatch, tmp_path):
         """mr_review_context still returns a valid structure; semantic_available=False."""
@@ -262,8 +262,7 @@ class TestMrReviewContext:
 
         def _no_semantic(root: str):
             raise RuntimeError(
-                "semantic search needs the optional extra — "
-                "install with: pip install myopic[semantic]"
+                "the semantic layer is unavailable — reinstall myopic or start Ollama"
             )
 
         monkeypatch.setattr(store_mod.CodeIndex, "connect", staticmethod(_no_semantic))
@@ -317,8 +316,7 @@ class TestMrReviewContext:
 
         def _no_semantic(root: str):
             raise RuntimeError(
-                "semantic search needs the optional extra — "
-                "install with: pip install myopic[semantic]"
+                "the semantic layer is unavailable — reinstall myopic or start Ollama"
             )
 
         monkeypatch.setattr(store_mod.CodeIndex, "connect", staticmethod(_no_semantic))

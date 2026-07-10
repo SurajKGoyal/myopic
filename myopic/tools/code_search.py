@@ -11,8 +11,8 @@ def code_search(query: str, root: str, k: int = 8) -> dict:
     Performs hybrid vector + full-text search with RRF reranking using a
     LanceDB index previously built by index_repo. Run index_repo(root) first.
 
-    Requires the myopic[semantic] extra (lancedb + httpx) and a running Ollama
-    instance for query embedding.
+    Requires a running Ollama (the semantic layer is built in; run `myopic doctor`
+    to set it up) for query embedding.
 
     Args:
         query: Natural language or code snippet describing what to find.
@@ -29,8 +29,7 @@ def code_search(query: str, root: str, k: int = 8) -> dict:
     except ImportError:
         return {
             "error": (
-                "semantic search needs the optional extra — "
-                "install with: pip install myopic[semantic]"
+                "the semantic layer is bundled — reinstall myopic if this import fails"
             )
         }
 

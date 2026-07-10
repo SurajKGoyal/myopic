@@ -107,7 +107,7 @@ def auto_pull() -> bool:
 def auto_index() -> bool:
     """Whether mr_review_context auto-builds/refreshes the index (default ON).
 
-    If you installed myopic[semantic] you opted into the semantic layer, so we make
+    The semantic layer is built in, so we make
     it just work — index on first review, refresh when stale — with no manual
     index_repo. Disable with MYOPIC_AUTO_INDEX=0 (e.g. to avoid a slow first build
     inside a review call; the graph pass works regardless).

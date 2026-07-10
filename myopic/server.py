@@ -61,8 +61,9 @@ touch. Call a finding "introduced by this MR" only if it appears in the diff
 (verify with mr_diff_lines); otherwise report it as pre-existing. Surfacing
 nearby pre-existing issues is useful — mislabeling them as this MR's is not.
 
-Semantic search — optional, needs `pip install myopic[semantic]` + a local Ollama
-server (MYOPIC_OLLAMA_URL, default http://localhost:11434):
+Semantic search — requires a running Ollama (the semantic layer is built in; run
+`myopic doctor` to set it up); server URL is MYOPIC_OLLAMA_URL (default
+http://localhost:11434):
 7. index_repo(root) — build or INCREMENTALLY refresh the semantic index. The
    first run is a full build; after that only changed files are re-embedded, so
    refreshing is cheap. force=True rebuilds everything. Returns {mode,
@@ -79,10 +80,10 @@ server (MYOPIC_OLLAMA_URL, default http://localhost:11434):
 10. mr_review_context(url, root) — the graph-first fusion tool. Extracts the real
    changed DECLARATIONS from the diff (same AST resolution as mr_diff_sections,
    not a token-frequency guess), runs dependency_impact on each (always, no extra
-   needed), and — if myopic[semantic] is installed and the repo is indexed —
+   needed), and — if the repo is indexed —
    enriches each with related_patterns from a semantic search. A structure-only
    result (semantic_available: false) is fully valid; semantic context is
-   additive. AUTO-INDEX: with myopic[semantic] installed it indexes the repo on the
+   additive. AUTO-INDEX: it indexes the repo on the
    first review and refreshes when stale — automatically, no manual index_repo
    (disable with MYOPIC_AUTO_INDEX=0). The graph pass needs no index and always
    runs. index_status is surfaced for visibility.
@@ -111,7 +112,7 @@ Recommended flow for any non-trivial MR:
   2. mr_diff_sections(url) (large MRs) or mr_diff_lines(url, files_filter=[...batch]) — read the change, token-safe.
   3. For each risky changed symbol: dependency_impact / trace_call_chain against a
      local clone — review the change against everything that depends on it.
-  4. (Optional, with myopic[semantic]) mr_review_context(url, root) for a combined
+  4. (Optional) mr_review_context(url, root) for a combined
      graph + semantic context snapshot in one call.
   5. If the user asks to post the review: get line numbers via mr_diff_lines, then
      mr_post_comments(url, comments). Later, mr_verify_review(url) to confirm.
@@ -339,8 +340,9 @@ def index_repo(root: str, force: bool = False) -> dict:
     LanceDB table. After the first build this is INCREMENTAL: only files whose
     content changed since the last run are re-embedded, so refreshing is cheap —
     run it freely (e.g. when index_status reports "stale"). A changed embedding
-    model or force=True does a full rebuild. Requires the myopic[semantic] extra
-    and Ollama at MYOPIC_OLLAMA_URL (default http://localhost:11434) with the
+    model or force=True does a full rebuild. Requires a running Ollama (the
+    semantic layer is built in; run `myopic doctor` to set it up) at
+    MYOPIC_OLLAMA_URL (default http://localhost:11434) with the
     model pulled (MYOPIC_EMBED_MODEL).
 
     Args:
@@ -381,8 +383,8 @@ def code_search(query: str, root: str, k: int = 8) -> dict:
     Embeds the query via Ollama, then runs a combined vector + FTS search with
     RRF reranking against the LanceDB index built by index_repo. Use this to
     find existing patterns, conventions, or examples in the codebase before
-    reviewing a new implementation. Requires myopic[semantic] and index_repo to
-    have been run first.
+    reviewing a new implementation. Requires a running Ollama (the semantic layer
+    is built in) and index_repo to have been run first.
 
     Args:
         query: Natural language or code snippet describing what to find.
@@ -402,7 +404,7 @@ def mr_review_context(url: str, root: str, max_symbols: int = 8) -> dict:
 
     Extracts the top-N most-frequent identifiers from the MR diff, then for each:
     1. Runs dependency_impact(symbol, root) — always, no optional extras needed.
-    2. If myopic[semantic] is installed AND the repo has been indexed via
+    2. If the repo has been indexed via
        index_repo(root), enriches each symbol with related_patterns from a hybrid
        semantic search against the codebase.
 
