@@ -10,6 +10,8 @@ monkeypatched. Three test classes cover:
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from myopic.platforms.base import DiffSet, FileDiff, ReviewMetadata
@@ -135,9 +137,10 @@ class TestGracefulDegradation:
 class _FakeCodeIndex:
     """Captures rows passed to replace() without touching real LanceDB."""
 
-    def __init__(self):
+    def __init__(self, root="."):
         self.replaced_rows: list[dict] = []
         self.written_meta: dict | None = None
+        self.root = Path(root)  # indexer._write_meta reads idx.root for the meta
 
     def has_table(self) -> bool:
         return False
@@ -186,6 +189,7 @@ class TestIndexerChunkCollection:
         fake_index = _FakeCodeIndex()
 
         def _fake_connect(root: str) -> _FakeCodeIndex:
+            fake_index.root = Path(root)
             return fake_index
 
         monkeypatch.setattr(indexer_mod, "embed_texts", lambda texts: [[0.0] * 4 for _ in texts])

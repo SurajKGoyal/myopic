@@ -199,11 +199,16 @@ def _full_index(idx, chunks_by_file, hash_by_file, skipped, model, git_sha) -> d
 
 
 def _write_meta(idx, hash_by_file, model, git_sha, total) -> None:
+    root = str(idx.root)
     idx.write_meta({
         "git_sha": git_sha,
         "model": model,
         "chunks": total,
         "indexed_at": _now(),
+        # Identity for cleanup: the checkout path (orphan detection — is it still
+        # on disk?) and the origin URL (dedup separate clones of one repo).
+        "root": root,
+        "remote": gitutil.remote_url(root),
         "files": hash_by_file,
     })
 

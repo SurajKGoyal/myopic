@@ -35,6 +35,29 @@ def sha_of(root: str, ref: str) -> str | None:
     return _run(root, ["rev-parse", "--verify", "--quiet", ref]) or None
 
 
+def remote_url(root: str) -> str | None:
+    """The `origin` remote URL, normalized, or None if there's no origin.
+
+    Two separate clones of the same repository share this — unlike the
+    git-common-dir key, which is per-clone — so it identifies "the same project"
+    across clones for de-duplicating stale indexes. Normalized (lowercased, `.git`
+    and trailing slash stripped, scp-style `git@host:path` → `host/path`) so
+    equivalent URLs compare equal.
+    """
+    raw = _run(root, ["remote", "get-url", "origin"])
+    if not raw:
+        return None
+    u = raw.strip().lower()
+    if u.startswith("git@") and ":" in u:  # scp-style → host/path
+        u = u[len("git@"):].replace(":", "/", 1)
+    for prefix in ("https://", "http://", "ssh://", "git://"):
+        if u.startswith(prefix):
+            u = u[len(prefix):]
+    if "@" in u.split("/", 1)[0]:  # strip user@ credentials in the host segment
+        u = u.split("@", 1)[1]
+    return u[:-4] if u.endswith(".git") else u.rstrip("/")
+
+
 def head_sha(root: str) -> str | None:
     """Full SHA of HEAD, or None if root isn't a git repo / git is unavailable."""
     return sha_of(root, "HEAD")

@@ -71,6 +71,24 @@ class CodeIndex:
         db = lancedb.connect(str(idx_dir))
         return cls(root_path, db, table_name)
 
+    @property
+    def root(self) -> Path:
+        """The checkout path this index was opened for."""
+        return self._root
+
+    @property
+    def table_name(self) -> str:
+        return self._table_name
+
+    def drop_table(self) -> bool:
+        """Delete this repo's LanceDB table and its freshness sidecar. Returns True
+        if a table was dropped. Used by `myopic prune` to reclaim stale indexes."""
+        existed = self.has_table()
+        if existed:
+            self._db.drop_table(self._table_name)
+        self.delete_meta()
+        return existed
+
     def has_table(self) -> bool:
         """Return True if this repo has already been indexed."""
         # list_tables() returns a ListTablesResponse; .tables is the name list

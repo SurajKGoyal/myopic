@@ -9,6 +9,7 @@ Commands:
   myopic doctor             — health-check config + the semantic layer (Ollama)
   myopic worktree URL REPO  — check out an MR's branch in an isolated worktree
   myopic index [PATH]       — build/refresh the semantic index (cron-friendly)
+  myopic prune              — remove stale/duplicate semantic indexes (dry-run by default)
   (no subcommand)           — start the MCP server when launched by a client
 """
 
@@ -181,6 +182,49 @@ def index(root: str, force: bool) -> None:
         f"({result['changed_files']} changed, {result['deleted_files']} removed) "
         f"@ {result.get('git_sha') or 'no-git'}"
     )
+
+
+def _fmt_mb(n: int) -> str:
+    return f"{n / (1024 * 1024):.1f} MB"
+
+
+@cli.command()
+@click.option("--scan", "scan_dirs", multiple=True, type=click.Path(),
+              help="Directory to walk for live repos (repeatable). Helps identify which "
+                   "of several same-project indexes is still reachable. Defaults to the "
+                   "parents of already-known repos.")
+@click.option("--apply", is_flag=True, default=False,
+              help="Actually delete. Without it, prune only reports (dry-run).")
+def prune(scan_dirs: tuple[str, ...], apply: bool) -> None:
+    """Remove stale semantic indexes: orphans (checkout gone) and duplicate twins
+    (the same repo indexed from a second clone). Dry-run unless you pass --apply.
+
+    Indexes are keyed by git-common-dir, so a clone and its worktrees share one
+    table — but a *separate clone* of the same repo builds its own. This reclaims
+    those. The keeper in a duplicate set is the index that's still reachable.
+    """
+    from myopic.semantic.prune import prune as _prune
+
+    try:
+        report = _prune(list(scan_dirs), apply=apply)
+    except Exception as exc:  # noqa: BLE001 — surface a clean message
+        console.print(f"[red]✗[/red] {str(exc).splitlines()[0][:160]}")
+        raise SystemExit(1) from exc
+
+    prunable, keep = report["prunable"], report["keep"]
+    if not prunable:
+        console.print(f"[green]✓[/green] nothing to prune — {len(keep)} index(es), all reachable.")
+        return
+
+    verb = "Removed" if report["applied"] else "Would remove"
+    console.print(f"[bold]{verb} {len(prunable)} index(es)[/bold] "
+                  f"({_fmt_mb(report['reclaimed_bytes'])}), keeping {len(keep)}:\n")
+    for r in prunable:
+        repo = Path(r["root"]).name if r["root"] else r["name"][:12]
+        console.print(f"  [yellow]−[/yellow] {repo:<28} {_fmt_mb(r['size_bytes']):>9}  [dim]{r['reason']}[/dim]")
+    if not report["applied"]:
+        console.print("\nDry-run. Re-run with [cyan]--apply[/cyan] to delete "
+                      "(add [cyan]--scan <dir>[/cyan] if a keeper looks wrong).")
 
 
 # ---------------------------------------------------------------------------
