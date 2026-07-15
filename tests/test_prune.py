@@ -2,18 +2,19 @@
 
 import json
 
-from myopic.semantic.prune import find_prunable, scan_indexes
+from myopic.semantic.prune import evict_twins, find_prunable, scan_indexes
 from myopic.semantic.store import _table_name
 
 
-def _meta(idx, name, *, root=None, remote=None, files=(), at="2026-01-01", chunks=10):
+def _meta(idx, name, *, root=None, remote=None, files=(), at="2026-01-01", chunks=10, lance=True):
     (idx / f"{name}.meta.json").write_text(json.dumps({
         "root": root, "remote": remote, "indexed_at": at, "chunks": chunks,
         "files": {f: "h" for f in files},
     }))
-    lance = idx / f"{name}.lance"
-    lance.mkdir(exist_ok=True)
-    (lance / "data").write_text("x" * 100)  # give it a nonzero size
+    if lance:
+        d = idx / f"{name}.lance"
+        d.mkdir(exist_ok=True)
+        (d / "data").write_text("x" * 100)  # give it a nonzero size
 
 
 def test_scan_reads_size_and_fields(tmp_path):
@@ -53,6 +54,36 @@ def test_duplicate_by_fileset_without_remote(tmp_path):
     _meta(idx, "legacytwin", files=["a", "b", "c", "e"], at="2026-07-08")  # no root, jaccard 0.6
     rep = find_prunable([], idx_dir=idx)
     assert [r["name"] for r in rep["prunable"]] == ["legacytwin"]
+
+
+def test_evict_drops_dead_twin_but_spares_a_live_second_clone(tmp_path):
+    # The self-heal-on-index safety property: a second clone someone still uses
+    # keeps its index; only unreachable twins are dropped.
+    idx = tmp_path / "index"; idx.mkdir()
+    cur, live = tmp_path / "cur", tmp_path / "clone_live"
+    cur.mkdir(); live.mkdir()
+    cur_key, live_key = _table_name(str(cur)), _table_name(str(live))
+
+    _meta(idx, cur_key, root=str(cur), remote="host/x", files=["a", "b"], lance=False)
+    _meta(idx, "deadtwin", root=str(tmp_path / "gone"), remote="host/x", files=["a", "b"], lance=False)
+    _meta(idx, live_key, root=str(live), remote="host/x", files=["a", "b"], lance=False)
+
+    dropped = evict_twins(cur_key, "host/x", frozenset({"a", "b"}), idx_dir=idx)
+
+    assert dropped == ["deadtwin"]
+    assert not (idx / "deadtwin.meta.json").exists()
+    assert (idx / f"{live_key}.meta.json").exists()   # live clone left alone
+    assert (idx / f"{cur_key}.meta.json").exists()    # never evicts itself
+
+
+def test_evict_ignores_a_different_project(tmp_path):
+    idx = tmp_path / "index"; idx.mkdir()
+    cur = tmp_path / "cur"; cur.mkdir()
+    cur_key = _table_name(str(cur))
+    _meta(idx, cur_key, root=str(cur), remote="host/x", files=["a", "b"], lance=False)
+    _meta(idx, "other", root=str(tmp_path / "gone"), remote="host/OTHER", files=["p", "q"], lance=False)
+    assert evict_twins(cur_key, "host/x", frozenset({"a", "b"}), idx_dir=idx) == []
+    assert (idx / "other.meta.json").exists()
 
 
 def test_distinct_projects_not_pruned(tmp_path):

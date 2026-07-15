@@ -140,7 +140,9 @@ class _FakeCodeIndex:
     def __init__(self, root="."):
         self.replaced_rows: list[dict] = []
         self.written_meta: dict | None = None
-        self.root = Path(root)  # indexer._write_meta reads idx.root for the meta
+        # indexer reads these for the meta sidecar + the self-heal pass
+        self.root = Path(root)
+        self.table_name = "fake-table"
 
     def has_table(self) -> bool:
         return False

@@ -135,7 +135,8 @@ def index_repo(root: str, force: bool = False) -> dict:
     )
 
     if not incremental:
-        return _full_index(idx, chunks_by_file, hash_by_file, skipped, model, git_sha)
+        result = _full_index(idx, chunks_by_file, hash_by_file, skipped, model, git_sha)
+        return _self_heal(idx, hash_by_file, result)
 
     prev_hashes: dict[str, str] = meta["files"]
     changed_files = [f for f, h in hash_by_file.items() if prev_hashes.get(f) != h]
@@ -148,12 +149,12 @@ def index_repo(root: str, force: bool = False) -> dict:
         # via commits that didn't touch indexed files).
         total = idx.row_count()
         _write_meta(idx, hash_by_file, model, git_sha, total)
-        return {
+        return _self_heal(idx, hash_by_file, {
             "mode": "incremental", "indexed_chunks": total,
             "files": files_processed, "skipped": skipped,
             "changed_files": 0, "deleted_files": 0,
             "git_sha": gitutil.short(git_sha), "model": model,
-        }
+        })
 
     changed_chunks: list[dict] = []
     for f in changed_files:
@@ -165,15 +166,36 @@ def index_repo(root: str, force: bool = False) -> dict:
     except Exception:
         # Delta failed (schema drift, corrupt table, ...) — fall back to a clean
         # full rebuild rather than leaving a half-updated index.
-        return _full_index(idx, chunks_by_file, hash_by_file, skipped, model, git_sha)
+        result = _full_index(idx, chunks_by_file, hash_by_file, skipped, model, git_sha)
+        return _self_heal(idx, hash_by_file, result)
 
     _write_meta(idx, hash_by_file, model, git_sha, total)
-    return {
+    return _self_heal(idx, hash_by_file, {
         "mode": "incremental", "indexed_chunks": total,
         "files": files_processed, "skipped": skipped,
         "changed_files": len(changed_files), "deleted_files": len(deleted_files),
         "git_sha": gitutil.short(git_sha), "model": model,
-    }
+    })
+
+
+def _self_heal(idx, hash_by_file, result: dict) -> dict:
+    """After a successful index, drop dead twins of this repo — indexes of the same
+    project (a second clone) whose checkout is gone or whose key no longer matches.
+    A still-live second clone is left alone. Best-effort: cleanup must never fail
+    an index. Reports the count under `evicted` so it's visible, not silent.
+    """
+    try:
+        from myopic.semantic.prune import evict_twins
+
+        root = str(idx.root)
+        dropped = evict_twins(
+            idx.table_name, gitutil.remote_url(root), frozenset(hash_by_file.keys())
+        )
+    except Exception:  # noqa: BLE001 — never let cleanup break indexing
+        return result
+    if dropped:
+        result["evicted"] = len(dropped)
+    return result
 
 
 def _full_index(idx, chunks_by_file, hash_by_file, skipped, model, git_sha) -> dict:

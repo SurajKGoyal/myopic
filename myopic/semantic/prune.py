@@ -146,6 +146,51 @@ def find_prunable(scan_dirs: list[str] | None = None, idx_dir: Path | None = Non
     return {"prunable": prunable, "keep": keep, "reachable": reachable}
 
 
+def _is_reachable(record: dict) -> bool:
+    """True when this table is still the live index for an on-disk checkout — i.e.
+    its name equals that checkout's current git-common-dir key."""
+    root = record.get("root")
+    if not root or not Path(root).exists():
+        return False
+    try:
+        return _table_name(root) == record["name"]
+    except Exception:  # noqa: BLE001 — best-effort
+        return False
+
+
+def _drop(idx_dir: Path, name: str) -> None:
+    import lancedb
+
+    db = lancedb.connect(str(idx_dir))
+    if name in set(db.list_tables().tables):
+        db.drop_table(name)
+    (idx_dir / f"{name}{_META_SUFFIX}").unlink(missing_ok=True)
+
+
+def evict_twins(name: str, remote: str | None, fileset: frozenset,
+                *, idx_dir: Path | None = None) -> list[str]:
+    """Drop indexes that are the same project as the just-indexed table `name` but
+    are no longer reachable (checkout gone, or the key no longer matches it).
+
+    Called after a successful index so duplicates self-heal instead of piling up. A
+    second clone that is still LIVE is deliberately left alone — someone may be
+    using it; only dead twins go. Returns the names dropped.
+    """
+    d = idx_dir or index_dir()
+    dropped: list[str] = []
+    for r in scan_indexes(d):
+        if r["name"] == name:
+            continue
+        same_project = (
+            (bool(remote) and r["remote"] == remote)
+            or _jaccard(r["fileset"], fileset) >= _DUP_JACCARD
+        )
+        if same_project and not _is_reachable(r):
+            _drop(d, r["name"])
+            dropped.append(r["name"])
+    return dropped
+
+
 def prune(scan_dirs: list[str] | None = None, *, apply: bool = False,
           idx_dir: Path | None = None) -> dict:
     """Find and (when apply=True) delete prunable index tables. Returns a report
@@ -153,16 +198,9 @@ def prune(scan_dirs: list[str] | None = None, *, apply: bool = False,
     report = find_prunable(scan_dirs, idx_dir)
     reclaimed = sum(r["size_bytes"] for r in report["prunable"])
     if apply and report["prunable"]:
-        import lancedb
-
         d = idx_dir or index_dir()
-        db = lancedb.connect(str(d))
-        existing = set(db.list_tables().tables)
         for r in report["prunable"]:
-            name = r["name"]
-            if name in existing:
-                db.drop_table(name)
-            (d / f"{name}{_META_SUFFIX}").unlink(missing_ok=True)
+            _drop(d, r["name"])
     report["reclaimed_bytes"] = reclaimed
     report["applied"] = apply
     return report
