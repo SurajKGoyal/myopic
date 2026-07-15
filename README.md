@@ -213,6 +213,17 @@ The index is **per repository, not per checkout** — a `myopic worktree` at an 
 head shares its clone's index, so reviewing a new branch never rebuilds it; only
 the files that branch changed get re-embedded.
 
+A *separate clone* of the same repo does get its own index, and a repo you delete
+leaves one behind. Indexing drops such dead copies automatically; to review and
+reclaim them yourself:
+
+```bash
+myopic prune            # dry-run: what's stale, and how much it's costing
+myopic prune --apply    # delete them
+```
+
+A second clone you still use keeps its index — only unreachable ones are removed.
+
 myopic is a stdio server (no background process), so there's no built-in
 scheduler — but `myopic index /path/to/repo` is the hook for one. Point cron or
 launchd at it to keep an index fresh out of band:
