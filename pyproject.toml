@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "myopic"
-version = "0.1.9"
+version = "0.1.10"
 description = "The code-review MCP that reviews your merge request against the whole codebase, not just the diff"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -20,7 +20,7 @@ classifiers = [
     "Topic :: Software Development :: Quality Assurance",
 ]
 dependencies = [
-    "mcp[cli]>=1.0.0",
+    "mcp[cli]>=1.0.0,<2",   # mcp 2.0 removed mcp.server.fastmcp; cap until we migrate
     "python-gitlab>=4.0",
     "PyGithub>=2.0",
     "click>=8.0",
