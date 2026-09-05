@@ -71,6 +71,19 @@ class GitHubReview(Review):
             commits=commits,
         )
 
+    def head_refspecs(self) -> list[str]:
+        """`refs/pull/N/head` first — the base repo serves it for fork PRs too.
+
+        GitHub publishes every PR's head under the *base* repository, so this
+        one ref resolves whether the PR came from a branch or a fork. The
+        branch name stays as a fallback for hosts that disable the pull refs.
+        """
+        refs = [f"pull/{self._number}/head"]
+        branch = getattr(self._pr.head, "ref", "")
+        if branch:
+            refs.append(branch)
+        return refs
+
     def diffs(self) -> DiffSet:
         shas = {
             "base_sha": getattr(self._pr.base, "sha", ""),

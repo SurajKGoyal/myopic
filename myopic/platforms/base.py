@@ -177,6 +177,19 @@ class Review(ABC):
         """Hook to redact secrets from an error message. Identity by default."""
         return message
 
+    def head_refspecs(self) -> list[str]:
+        """Refs to fetch, in order, to bring this review's head commit local.
+
+        The source branch is the obvious candidate but it only exists on the
+        target remote when the review comes from a branch in the *same*
+        project. A fork's branch never does, so `git fetch origin <branch>`
+        fails and the head stays unreachable. Backends that expose a
+        server-side head ref override this and put it first — it resolves
+        same-project and fork reviews alike.
+        """
+        branch = self.metadata().source_branch
+        return [branch] if branch else []
+
     def post_comments(
         self,
         comments: list[CommentDraft],
