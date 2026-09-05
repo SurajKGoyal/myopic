@@ -175,6 +175,10 @@ code isn't there. `myopic worktree <mr-url> <repo>` checks out the MR head in a
 throwaway worktree (your main checkout untouched) and prints the path to use as
 `root`. `mr_review_context` also warns when `root` doesn't hold the MR's head.
 
+Fork PRs work too: a fork's branch doesn't exist on your remote, so GitHub PR
+heads are fetched via `refs/pull/N/head`, which the base repository serves
+whether the PR came from a branch or a fork.
+
 ---
 
 ## Semantic search (built in — needs Ollama)

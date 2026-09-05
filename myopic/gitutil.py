@@ -113,7 +113,11 @@ def commit_present(root: str, sha: str) -> bool:
 
 
 def fetch_ref(root: str, ref: str) -> bool:
-    """`git fetch origin <ref>` — pull a branch so its commits become local."""
+    """`git fetch origin <ref>` — make a remote ref's commits local.
+
+    `ref` is any fetchable ref, not only a branch. A fork's PR head is reachable
+    only as `pull/N/head`, which is not a branch on this remote at all.
+    """
     return _run(root, ["fetch", "origin", ref]) is not None
 
 

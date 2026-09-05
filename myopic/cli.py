@@ -371,14 +371,33 @@ def worktree(url: str, repo: str, wt_path: str | None) -> None:
         console.print("[red]✗[/red] could not determine the MR head SHA.")
         raise SystemExit(1)
 
-    if not gitutil.commit_present(repo, head):
-        console.print(f"Fetching [cyan]{meta.source_branch}[/cyan]…")
-        gitutil.fetch_ref(repo, meta.source_branch)
-    if not gitutil.commit_present(repo, head):
-        console.print(
-            f"[red]✗[/red] MR head {gitutil.short(head)} not found even after fetching "
-            f"{meta.source_branch}. Check the remote and the branch name."
-        )
+    found = gitutil.commit_present(repo, head)
+    refspecs: list[str] = []
+    if not found:
+        # Only ask for the refspecs when a fetch is actually needed — building
+        # them can cost a platform round trip. A fork's branch does not exist
+        # on origin, so the platform's own head ref is tried first.
+        refspecs = review.head_refspecs(meta)
+        for ref in refspecs:
+            console.print(f"Fetching [cyan]{ref}[/cyan]…")
+            gitutil.fetch_ref(repo, ref)
+            if gitutil.commit_present(repo, head):
+                found = True
+                break
+    if not found:
+        if refspecs:
+            console.print(
+                f"[red]✗[/red] MR head {gitutil.short(head)} not found after fetching: "
+                f"{', '.join(refspecs)}. Check that origin points at the target "
+                "repository and that the review is reachable."
+            )
+        else:
+            # Nothing was fetched — saying "after fetching" here would send the
+            # reader hunting for a network fault that never happened.
+            console.print(
+                f"[red]✗[/red] MR head {gitutil.short(head)} is not local, and the review "
+                "exposes no ref to fetch. Check that its source branch is set."
+            )
         raise SystemExit(1)
 
     path = wt_path or str(Path(repo).parent / f"{Path(repo).name}__mr{meta.number}")
