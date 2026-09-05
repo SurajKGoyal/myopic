@@ -71,12 +71,16 @@ class GitHubReview(Review):
             commits=commits,
         )
 
-    def head_refspecs(self) -> list[str]:
+    def head_refspecs(self, meta: ReviewMetadata | None = None) -> list[str]:
         """`refs/pull/N/head` first — the base repo serves it for fork PRs too.
 
         GitHub publishes every PR's head under the *base* repository, so this
         one ref resolves whether the PR came from a branch or a fork. The
         branch name stays as a fallback for hosts that disable the pull refs.
+
+        `meta` is accepted for signature compatibility and unused: the branch
+        is read straight off the already-fetched PR object, so there is no
+        round trip to save.
         """
         refs = [f"pull/{self._number}/head"]
         branch = getattr(self._pr.head, "ref", "")

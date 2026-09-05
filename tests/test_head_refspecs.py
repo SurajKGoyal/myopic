@@ -16,8 +16,6 @@ pins that as a decision rather than an oversight.
 
 from __future__ import annotations
 
-from pathlib import Path
-
 from click.testing import CliRunner
 
 from myopic import cli as cli_mod
@@ -88,7 +86,10 @@ class TestRefspecOrdering:
 class _FakeReview:
     """Stands in for an opened review: a fork PR whose branch is not on origin."""
 
-    def __init__(self, head_sha): self._head = head_sha
+    def __init__(self, head_sha, refspecs=("pull/17/head", "schema-cache-staleness")):
+        self._head = head_sha
+        self._refspecs = refspecs
+        self.refspec_calls = 0
 
     def metadata(self):
         return ReviewMetadata(number=17, title="t", author="a",
@@ -97,17 +98,22 @@ class _FakeReview:
     def diffs(self):
         return type("_D", (), {"shas": {"head_sha": self._head}})()
 
-    def head_refspecs(self):
-        return ["pull/17/head", "schema-cache-staleness"]
+    def head_refspecs(self, meta=None):
+        self.refspec_calls += 1
+        return list(self._refspecs)
 
 
-def _wire(monkeypatch, *, resolves_on: str | None, fetched: list[str]):
+def _wire(monkeypatch, *, resolves_on: str | None, fetched: list[str],
+          present: bool = False, refspecs=("pull/17/head", "schema-cache-staleness")):
     """Patch the CLI's git seam. The head appears only after `resolves_on`."""
-    state = {"present": False}
+    state = {"present": present}
+    review = _FakeReview("deadbeef", refspecs=refspecs)
 
-    monkeypatch.setattr(cli_mod, "open_review", lambda url: _FakeReview("deadbeef"), raising=False)
+    # `worktree` does `from myopic.platforms.base import open_review` inside the
+    # function body, so the name resolves against base_mod at call time —
+    # patching cli_mod would be inert.
     import myopic.platforms.base as base_mod
-    monkeypatch.setattr(base_mod, "open_review", lambda url: _FakeReview("deadbeef"))
+    monkeypatch.setattr(base_mod, "open_review", lambda url: review)
 
     def _fetch(root, ref):
         fetched.append(ref)
@@ -118,6 +124,7 @@ def _wire(monkeypatch, *, resolves_on: str | None, fetched: list[str]):
     monkeypatch.setattr(cli_mod.gitutil, "commit_present", lambda root, sha: state["present"])
     monkeypatch.setattr(cli_mod.gitutil, "fetch_ref", _fetch)
     monkeypatch.setattr(cli_mod.gitutil, "add_worktree", lambda root, path, ref: True)
+    return review
 
 
 class TestWorktreeFetchFallthrough:
@@ -143,6 +150,35 @@ class TestWorktreeFetchFallthrough:
         )
         assert result.exit_code == 0, result.output
         assert fetched == ["pull/17/head", "schema-cache-staleness"]
+
+    def test_head_already_local_skips_fetch_and_refspec_lookup(self, tmp_path, monkeypatch):
+        # Building refspecs can cost a platform round trip (GitLab's metadata()
+        # lists the MR's commits), so it must not happen when nothing is fetched.
+        fetched: list[str] = []
+        review = _wire(monkeypatch, resolves_on=None, fetched=fetched, present=True)
+        result = CliRunner().invoke(
+            cli_mod.cli,
+            ["worktree", "https://github.com/o/r/pull/17", str(tmp_path),
+             "--path", str(tmp_path / "wt")],
+        )
+        assert result.exit_code == 0, result.output
+        assert fetched == []
+        assert review.refspec_calls == 0
+
+    def test_no_candidate_refs_does_not_claim_a_fetch_happened(self, tmp_path, monkeypatch):
+        # An empty refspec list means nothing was fetched; saying "after
+        # fetching" would point the reader at a network fault that never was.
+        fetched: list[str] = []
+        _wire(monkeypatch, resolves_on=None, fetched=fetched, refspecs=())
+        result = CliRunner().invoke(
+            cli_mod.cli,
+            ["worktree", "https://github.com/o/r/pull/17", str(tmp_path),
+             "--path", str(tmp_path / "wt")],
+        )
+        assert result.exit_code == 1
+        assert fetched == []
+        assert "after fetching" not in result.output
+        assert "source branch" in result.output
 
     def test_exhausting_candidates_reports_what_was_tried(self, tmp_path, monkeypatch):
         fetched: list[str] = []

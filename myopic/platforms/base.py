@@ -177,7 +177,7 @@ class Review(ABC):
         """Hook to redact secrets from an error message. Identity by default."""
         return message
 
-    def head_refspecs(self) -> list[str]:
+    def head_refspecs(self, meta: ReviewMetadata | None = None) -> list[str]:
         """Refs to fetch, in order, to bring this review's head commit local.
 
         The source branch is the obvious candidate but it only exists on the
@@ -186,8 +186,14 @@ class Review(ABC):
         fails and the head stays unreachable. Backends that expose a
         server-side head ref override this and put it first — it resolves
         same-project and fork reviews alike.
+
+        Args:
+            meta: Already-fetched metadata. Pass it when the caller has one:
+                `metadata()` is a live platform call on some backends (GitLab
+                lists the MR's commits), so refetching it here doubles the
+                round trips for nothing.
         """
-        branch = self.metadata().source_branch
+        branch = (meta or self.metadata()).source_branch
         return [branch] if branch else []
 
     def post_comments(
